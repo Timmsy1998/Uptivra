@@ -1,5 +1,7 @@
 import { demoMode } from "./demo-mode";
 export type Monitor = {
+  type?: "http" | "heartbeat";
+  grace_seconds?: number;
   id: string;
   name: string;
   description: string;

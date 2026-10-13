@@ -32,6 +32,7 @@ export default function MonitorEditor({
   const ref = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [type, setType] = useState(monitor?.type || "http");
   useEffect(() => {
     ref.current?.showModal();
   }, []);
@@ -54,11 +55,13 @@ export default function MonitorEditor({
         name: f.get("name"),
         description: f.get("description"),
         group: f.get("group"),
-        url: f.get("url"),
+        type,
+        grace_seconds: type === "heartbeat" ? Number(f.get("grace")) : 0,
+        url: type === "heartbeat" ? "" : f.get("url"),
         interval_seconds: Number(f.get("interval")),
         timeout_seconds: Number(f.get("timeout")),
         expected_status: Number(f.get("status")),
-        contains: f.get("contains"),
+        contains: type === "heartbeat" ? "" : f.get("contains"),
         headers,
         failure_threshold: Number(f.get("failures")),
         recovery_threshold: Number(f.get("recoveries")),
@@ -107,6 +110,23 @@ export default function MonitorEditor({
       <form onSubmit={submit}>
         <ErrorMessage message={error} />
         <div className="form-grid">
+          <label className="wide">
+            Monitor type
+            <select
+              value={type}
+              disabled={!!monitor}
+              onChange={(e) => setType(e.target.value as "http" | "heartbeat")}
+            >
+              <option value="http">HTTP endpoint</option>
+              <option value="heartbeat" disabled={demoMode}>
+                Heartbeat (outbound signal)
+              </option>
+            </select>
+            <small>
+              Type is fixed after creation. Heartbeats require a live backend
+              and scheduler.
+            </small>
+          </label>
           <label>
             Display name
             <input
@@ -127,17 +147,21 @@ export default function MonitorEditor({
               placeholder="Core services"
             />
           </label>
-          <label className="wide">
-            Endpoint
-            <input
-              name="url"
-              type="url"
-              required
-              defaultValue={v.url}
-              placeholder="https://api.example.com/health"
-            />
-            <small>Public HTTP or HTTPS endpoints, on ports 80 and 443.</small>
-          </label>
+          {type === "http" && (
+            <label className="wide">
+              Endpoint
+              <input
+                name="url"
+                type="url"
+                required
+                defaultValue={v.url}
+                placeholder="https://api.example.com/health"
+              />
+              <small>
+                Public HTTP or HTTPS endpoints, on ports 80 and 443.
+              </small>
+            </label>
+          )}
           <label className="wide">
             Description
             <textarea
@@ -158,37 +182,54 @@ export default function MonitorEditor({
               defaultValue={v.interval_seconds}
             />
           </label>
-          <label>
-            Timeout (seconds)
-            <input
-              name="timeout"
-              type="number"
-              min={1}
-              max={10}
-              required
-              defaultValue={v.timeout_seconds}
-            />
-          </label>
-          <label>
-            Expected HTTP status
-            <input
-              name="status"
-              type="number"
-              min={100}
-              max={599}
-              required
-              defaultValue={v.expected_status}
-            />
-          </label>
-          <label>
-            Response must contain
-            <input
-              name="contains"
-              maxLength={1024}
-              defaultValue={v.contains}
-              placeholder="Optional text"
-            />
-          </label>
+          {type === "heartbeat" && (
+            <label>
+              Grace (seconds)
+              <input
+                name="grace"
+                type="number"
+                min={0}
+                max={86400}
+                required
+                defaultValue={monitor?.grace_seconds ?? 120}
+              />
+            </label>
+          )}
+          {type === "http" && (
+            <>
+              <label>
+                Timeout (seconds)
+                <input
+                  name="timeout"
+                  type="number"
+                  min={1}
+                  max={10}
+                  required
+                  defaultValue={v.timeout_seconds}
+                />
+              </label>
+              <label>
+                Expected HTTP status
+                <input
+                  name="status"
+                  type="number"
+                  min={100}
+                  max={599}
+                  required
+                  defaultValue={v.expected_status}
+                />
+              </label>
+              <label>
+                Response must contain
+                <input
+                  name="contains"
+                  maxLength={1024}
+                  defaultValue={v.contains}
+                  placeholder="Optional text"
+                />
+              </label>
+            </>
+          )}
           <label>
             Failures to open incident
             <input
@@ -211,21 +252,23 @@ export default function MonitorEditor({
               defaultValue={v.recovery_threshold}
             />
           </label>
-          <label className="wide">
-            Request headers (JSON)
-            {demoMode && " — disabled in demo; never enter secrets"}
-            <textarea
-              className="mono"
-              name="headers"
-              disabled={demoMode}
-              rows={3}
-              defaultValue={JSON.stringify(monitor?.headers || {}, null, 2)}
-              spellCheck={false}
-            />
-            <small>
-              Encrypted at rest. Never included on the public status page.
-            </small>
-          </label>
+          {type === "http" && (
+            <label className="wide">
+              Request headers (JSON)
+              {demoMode && " — disabled in demo; never enter secrets"}
+              <textarea
+                className="mono"
+                name="headers"
+                disabled={demoMode}
+                rows={3}
+                defaultValue={JSON.stringify(monitor?.headers || {}, null, 2)}
+                spellCheck={false}
+              />
+              <small>
+                Encrypted at rest. Never included on the public status page.
+              </small>
+            </label>
+          )}
           <label className="wide">
             Maintenance until (local time)
             <input
@@ -253,7 +296,7 @@ export default function MonitorEditor({
               required
               defaultChecked={v.authorized}
             />
-            I own this endpoint or have permission to monitor it.
+            I own this service or have permission to monitor it.
           </label>
         </div>
         <div className="dialog-footer">

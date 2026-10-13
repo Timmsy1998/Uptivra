@@ -398,7 +398,9 @@ export default function Dashboard() {
                                     <strong>{m.name}</strong>
                                     <small>
                                       {m.group ? m.group + " · " : ""}
-                                      {m.url}
+                                      {m.type === "heartbeat"
+                                        ? "Heartbeat"
+                                        : m.url}
                                     </small>
                                   </span>
                                 </button>

@@ -13,6 +13,34 @@ export default function MonitorDetail({
   onBack: () => void;
   onEdit: () => void;
 }) {
+  const heartbeat = monitor.type === "heartbeat";
+  const [credential, setCredential] = useState<{
+    token: string;
+    path: string;
+  } | null>(null);
+  const [generating, setGenerating] = useState(false);
+  useEffect(() => {
+    setCredential(null);
+  }, [monitor.id]);
+  async function generateToken() {
+    if (
+      !window.confirm(
+        "Generate a new heartbeat token? Any previous token will stop working.",
+      )
+    )
+      return;
+    setGenerating(true);
+    setCredential(null);
+    try {
+      setCredential(
+        await api("/monitors/" + monitor.id + "/heartbeat-token", "POST"),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to generate token");
+    } finally {
+      setGenerating(false);
+    }
+  }
   const [checks, setChecks] = useState<Check[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -60,61 +88,109 @@ export default function MonitorDetail({
           <strong>{ms(monitor.p95_ms)}</strong>
         </div>
       </div>
-      <section className="panel">
-        <div className="section-heading">
-          <h2>Response time</h2>
-          <span className="label">
-            Last {checks.length} checks · milliseconds
-          </span>
-        </div>
-        {checks.length ? (
-          <>
-            <div
-              className="latency-chart"
-              role="img"
-              aria-label="Response time of recent checks, ordered oldest to newest"
-            >
-              {chronological.map((c) => (
-                <div
-                  key={c.checked_at}
-                  className={c.ok ? "ok" : "fail"}
-                  style={{
-                    height: Math.max(2, (c.latency_ms / max) * 100) + "%",
-                  }}
-                  title={
-                    date(c.checked_at) +
-                    " · " +
-                    ms(c.latency_ms) +
-                    (c.ok ? " · healthy" : " · " + c.reason)
-                  }
-                />
-              ))}
-            </div>
-            <div className="chart-axis">
-              <span>{date(chronological[0].checked_at)}</span>
-              <span>{date(checks[0].checked_at)}</span>
-            </div>
-          </>
-        ) : (
-          <Empty
-            title={loading ? "Loading checks…" : "Awaiting the first check"}
+      {heartbeat && (
+        <section className="panel">
+          <h2>Heartbeat connection</h2>
+          <p>
+            Send an authenticated POST every {monitor.interval_seconds} seconds.
+            A signal is late after{" "}
+            {monitor.interval_seconds + (monitor.grace_seconds || 0)} seconds.
+            The scheduler evaluates signals every {monitor.interval_seconds}{" "}
+            seconds; failure and recovery thresholds apply.
+          </p>
+          <button
+            className="button"
+            disabled={generating}
+            onClick={generateToken}
           >
-            {demoMode
-              ? "Live checks are disabled in this demo. No measurements will be collected."
-              : `The scheduler checks this endpoint every ${monitor.interval_seconds} seconds when enabled.`}
-          </Empty>
-        )}
-        <p className="footnote">
-          Each bar is a recorded check. Gaps between checks have no measured
-          availability.
-        </p>
-      </section>
+            {generating ? "Generating…" : "Generate / replace heartbeat token"}
+          </button>
+          {credential && (
+            <div className="form-grid">
+              <label className="wide">
+                Heartbeat URL
+                <input
+                  readOnly
+                  value={window.location.origin + credential.path}
+                />
+              </label>
+              <label className="wide">
+                Bearer token (save now; shown once)
+                <input
+                  className="mono"
+                  readOnly
+                  type="password"
+                  value={credential.token}
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+              </label>
+              <small>
+                Copy the token into your bot’s environment. Leaving this monitor
+                clears it from the screen.
+              </small>
+            </div>
+          )}
+        </section>
+      )}
+      {!heartbeat && (
+        <section className="panel">
+          <div className="section-heading">
+            <h2>Response time</h2>
+            <span className="label">
+              Last {checks.length} checks · milliseconds
+            </span>
+          </div>
+          {checks.length ? (
+            <>
+              <div
+                className="latency-chart"
+                role="img"
+                aria-label="Response time of recent checks, ordered oldest to newest"
+              >
+                {chronological.map((c) => (
+                  <div
+                    key={c.checked_at}
+                    className={c.ok ? "ok" : "fail"}
+                    style={{
+                      height: Math.max(2, (c.latency_ms / max) * 100) + "%",
+                    }}
+                    title={
+                      date(c.checked_at) +
+                      " · " +
+                      ms(c.latency_ms) +
+                      (c.ok ? " · healthy" : " · " + c.reason)
+                    }
+                  />
+                ))}
+              </div>
+              <div className="chart-axis">
+                <span>{date(chronological[0].checked_at)}</span>
+                <span>{date(checks[0].checked_at)}</span>
+              </div>
+            </>
+          ) : (
+            <Empty
+              title={loading ? "Loading checks…" : "Awaiting the first check"}
+            >
+              {demoMode
+                ? "Live checks are disabled in this demo. No measurements will be collected."
+                : `The scheduler checks this endpoint every ${monitor.interval_seconds} seconds when enabled.`}
+            </Empty>
+          )}
+          <p className="footnote">
+            Each bar is a recorded check. Gaps between checks have no measured
+            availability.
+          </p>
+        </section>
+      )}
       <section className="panel">
         <div className="section-heading">
-          <h2>Recent checks</h2>
+          <h2>{heartbeat ? "Heartbeat evaluations" : "Recent checks"}</h2>
           <span className="label">
-            {monitor.interval_seconds}s interval · {monitor.timeout_seconds}s
-            timeout
+            {monitor.interval_seconds}s interval ·{" "}
+            {heartbeat
+              ? `${monitor.grace_seconds || 0}s grace`
+              : `${monitor.timeout_seconds}s timeout`}
           </span>
         </div>
         <div className="table-scroll">
@@ -135,7 +211,9 @@ export default function MonitorDetail({
                   <td>
                     <Status value={c.ok ? "healthy" : "down"} />
                   </td>
-                  <td className="mono">{ms(c.latency_ms)}</td>
+                  <td className="mono">
+                    {ms(heartbeat ? null : c.latency_ms)}
+                  </td>
                   <td className="mono">{c.status_code || "—"}</td>
                   <td>{c.reason || "Expected response"}</td>
                 </tr>
