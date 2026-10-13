@@ -7,18 +7,19 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/timmsy1998/uptivra/internal/cryptobox"
 	"github.com/timmsy1998/uptivra/internal/store"
+	"net/url"
 	"os"
 	"testing"
 )
 
 func DB(t *testing.T) *store.Store {
 	t.Helper()
-	url := os.Getenv("TEST_DATABASE_URL")
-	if url == "" {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
 		t.Skip("set TEST_DATABASE_URL to run PostgreSQL integration tests")
 	}
 	box, _ := cryptobox.New(base64.StdEncoding.EncodeToString(make([]byte, 32)))
-	s, e := store.Open(context.Background(), url, box)
+	s, e := store.Open(context.Background(), databaseURL, box)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -28,12 +29,14 @@ func DB(t *testing.T) *store.Store {
 		t.Fatal(e)
 	}
 	s.DB.Close()
-	cfg, e := pgx.ParseConfig(url)
+	u, e := url.Parse(databaseURL)
 	if e != nil {
 		t.Fatal(e)
 	}
-	cfg.RuntimeParams["search_path"] = name
-	s, e = store.Open(context.Background(), cfg.ConnString(), box)
+	q := u.Query()
+	q.Set("search_path", name)
+	u.RawQuery = q.Encode()
+	s, e = store.Open(context.Background(), u.String(), box)
 	if e != nil {
 		t.Fatal(e)
 	}
