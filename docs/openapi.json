@@ -2382,6 +2382,125 @@
           }
         }
       }
+    },
+    "/api/v1/incidents/{id}/updates": {
+      "post": {
+        "summary": "Append incident details and queue group-scoped notifications; checks control recovery",
+        "description": "",
+        "security": [
+          {
+            "apiKey": []
+          },
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin rejected or insufficient scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "JSON content type required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Update published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentUpdate"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Limit of 100 updates per incident reached"
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IncidentUpdateInput"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2867,6 +2986,13 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "updates": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/IncidentUpdate"
+            }
           }
         },
         "required": [
@@ -3293,6 +3419,64 @@
           "group"
         ],
         "additionalProperties": false
+      },
+      "IncidentUpdate": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "message",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "update",
+              "investigating",
+              "identified",
+              "monitoring"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Required trimmed text, at most 2000 UTF-8 bytes. Public for public monitors."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "IncidentUpdateInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "message"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "update",
+              "investigating",
+              "identified",
+              "monitoring"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "Required trimmed text, at most 2000 UTF-8 bytes. Public for public monitors."
+          }
+        }
       }
     }
   }

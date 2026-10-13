@@ -25,6 +25,9 @@ var heartbeatMigration string
 //go:embed migrations/003_channel_groups.sql
 var channelGroupsMigration string
 
+//go:embed migrations/004_incident_updates.sql
+var incidentUpdatesMigration string
+
 type Store struct {
 	DB  *pgxpool.Pool
 	Box *cryptobox.Box
@@ -65,7 +68,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	for _, migration := range []struct {
 		version int
 		sql     string
-	}{{2, heartbeatMigration}, {3, channelGroupsMigration}} {
+	}{{2, heartbeatMigration}, {3, channelGroupsMigration}, {4, incidentUpdatesMigration}} {
 		var applied bool
 		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_versions WHERE version=$1)`, migration.version).Scan(&applied); e != nil {
 			return e
@@ -222,7 +225,7 @@ func (s *Store) History(ctx context.Context, id string) ([]domain.Check, error) 
 	return out, rows.Err()
 }
 func (s *Store) Incidents(ctx context.Context, public bool) ([]domain.Incident, error) {
-	rows, e := s.DB.Query(ctx, `SELECT i.id,i.monitor_id,m.config->>'name',i.opened_at,i.resolved_at FROM incidents i JOIN monitors m ON m.id=i.monitor_id WHERE (NOT $1 OR m.public) ORDER BY i.opened_at DESC LIMIT 100`, public)
+	rows, e := s.DB.Query(ctx, `SELECT i.id,i.monitor_id,m.config->>'name',i.opened_at,i.resolved_at,COALESCE((SELECT jsonb_agg(jsonb_build_object('id',u.id,'status',u.status,'message',u.message,'created_at',u.created_at) ORDER BY u.created_at,u.id) FROM incident_updates u WHERE u.incident_id=i.id),'[]'::jsonb) FROM incidents i JOIN monitors m ON m.id=i.monitor_id WHERE (NOT $1 OR m.public) ORDER BY i.opened_at DESC LIMIT 100`, public)
 	if e != nil {
 		return nil, e
 	}
@@ -230,7 +233,7 @@ func (s *Store) Incidents(ctx context.Context, public bool) ([]domain.Incident, 
 	out := []domain.Incident{}
 	for rows.Next() {
 		var i domain.Incident
-		if e = rows.Scan(&i.ID, &i.MonitorID, &i.Name, &i.OpenedAt, &i.ResolvedAt); e != nil {
+		if e = rows.Scan(&i.ID, &i.MonitorID, &i.Name, &i.OpenedAt, &i.ResolvedAt, &i.Updates); e != nil {
 			return nil, e
 		}
 		out = append(out, i)

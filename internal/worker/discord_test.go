@@ -152,3 +152,41 @@ func TestDiscordFailuresRemainRetryable(t *testing.T) {
 		srv.Close()
 	}
 }
+
+func TestDiscordIncidentUpdate(t *testing.T) {
+	for _, resolved := range []bool{false, true} {
+		at := time.Now().UTC()
+		p := domain.IncidentEvent{Type: "incident.updated", MonitorName: "Bot", At: at, Update: &domain.IncidentUpdate{Status: "monitoring", Message: strings.Repeat("*", 2000) + " @everyone"}}
+		if resolved {
+			p.ResolvedAt = &at
+		}
+		raw, _ := json.Marshal(p)
+		out, err := discordPayload(raw, "https://status.example.com/status")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result struct {
+			Embeds []discordEmbed `json:"embeds"`
+		}
+		if err = json.Unmarshal(out, &result); err != nil {
+			t.Fatal(err)
+		}
+		e := result.Embeds[0]
+		if e.Title != "🔵 Incident update" || len([]rune(e.Description)) > 4096 || !strings.Contains(e.Description, "[View status page") {
+			t.Fatal(e)
+		}
+		expected := "Ongoing"
+		if resolved {
+			expected = "Resolved"
+		}
+		found := false
+		for _, f := range e.Fields {
+			if f.Name == "Status" {
+				found = f.Value == expected
+			}
+		}
+		if !found {
+			t.Fatal("incorrect update status", e)
+		}
+	}
+}

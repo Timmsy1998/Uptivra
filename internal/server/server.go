@@ -52,6 +52,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/monitors/{id}/heartbeat-token", s.auth(true, s.heartbeatToken))
 	mux.HandleFunc("POST /api/v1/heartbeats/{id}", s.heartbeat)
 	mux.Handle("GET /api/v1/incidents", s.auth(false, s.incidents))
+	mux.Handle("POST /api/v1/incidents/{id}/updates", s.auth(false, s.addIncidentUpdate))
 	mux.Handle("GET /api/v1/settings", s.auth(false, s.settings))
 	mux.Handle("PUT /api/v1/settings", s.auth(false, s.saveSettings))
 	mux.Handle("GET /api/v1/channels", s.auth(true, s.channels))

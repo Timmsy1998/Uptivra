@@ -32,7 +32,14 @@ export type Check = {
   status_code: number;
   reason: string;
 };
+export type IncidentUpdate = {
+  id: string;
+  status: "update" | "investigating" | "identified" | "monitoring";
+  message: string;
+  created_at: string;
+};
 export type Incident = {
+  updates?: IncidentUpdate[];
   id: string;
   monitor_id: string;
   name: string;

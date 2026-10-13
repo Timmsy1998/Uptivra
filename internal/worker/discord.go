@@ -36,6 +36,13 @@ func discordPayload(raw []byte, statusPageURL string) ([]byte, error) {
 	if p.Type == "incident.resolved" {
 		e.Title, e.Description, e.Color = "🟢 Service recovered", "The monitor has crossed its recovery threshold. The incident is resolved.", 0x286b4c
 		status = "Healthy"
+	} else if p.Type == "incident.updated" && p.Update != nil {
+		e.Title, e.Description, e.Color = "🔵 Incident update", discordTextLimit(p.Update.Message, 2800), 0x4f6389
+		status = "Ongoing"
+		if p.ResolvedAt != nil {
+			status = "Resolved"
+		}
+		e.Fields = append(e.Fields, discordField{"Update stage", discordText(p.Update.Status), true})
 	} else if p.Type != "incident.opened" {
 		e.Title, e.Description, e.Color = "Monitor event", "An uptime monitoring event was recorded.", 0x4f6389
 		status = "Unknown"
@@ -91,6 +98,9 @@ func discordPayload(raw []byte, statusPageURL string) ([]byte, error) {
 	}
 	if !p.At.IsZero() {
 		label := "Detected at"
+		if p.Type == "incident.updated" {
+			label = "Updated at"
+		}
 		if p.Type == "incident.resolved" {
 			label = "Recovered at"
 		}
@@ -119,12 +129,14 @@ func discordTime(t time.Time) string { return fmt.Sprintf("<t:%d:F> (<t:%d:R>)",
 
 // Keep user labels literal and bounded even for older or externally queued data.
 // Each dynamic field is limited to 300 runes, keeping the embed below 6000.
-func discordText(s string) string {
+func discordText(s string) string { return discordTextLimit(s, 300) }
+
+func discordTextLimit(s string, limit int) string {
 	s = strings.TrimSpace(s)
 	s = strings.NewReplacer("\\", "\\\\", "*", "\\*", "_", "\\_", "~", "\\~", "`", "\\`", "|", "\\|", "[", "\\[", "]", "\\]", "<", "‹", ">", "›", "@", "@\u200b").Replace(s)
 	r := []rune(s)
-	if len(r) > 300 {
-		s = string(r[:299]) + "…"
+	if len(r) > limit {
+		s = string(r[:limit-1]) + "…"
 	}
 	return s
 }

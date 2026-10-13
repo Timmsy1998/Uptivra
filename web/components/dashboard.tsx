@@ -553,7 +553,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <section className="panel">
-                <IncidentList incidents={incidents} />
+                <IncidentList incidents={incidents} onUpdate={refresh} />
               </section>
             </>
           )}

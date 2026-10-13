@@ -1651,3 +1651,47 @@ td small {
     transition: none !important;
   }
 }
+
+.incident-updates {
+  list-style: none;
+  padding: 0 0 0 16px;
+  margin: 20px 0 0;
+  border-left: 2px solid var(--line);
+}
+.incident-updates li {
+  margin: 0 0 20px;
+}
+.incident-updates strong {
+  text-transform: capitalize;
+  font-size: 12px;
+}
+.incident-updates time {
+  font-size: 10px;
+  color: var(--muted);
+}
+.incident-list .incident-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.incident-editor {
+  margin-top: 18px;
+}
+.incident-editor summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+.incident-editor form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.incident-editor textarea {
+  width: 100%;
+  resize: vertical;
+}
+.incident-editor label {
+  font-size: 12px;
+}

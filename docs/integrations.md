@@ -78,7 +78,7 @@ Example payload (IDs are opaque):
 
 New events also include an `opened_at` timestamp, `interval_seconds`, `failure_threshold`, `recovery_threshold`, and a `check` snapshot (`checked_at`, `ok`, `latency_ms`, `status_code`, `reason`). When applicable, `monitor_group`, `monitor_type`, `grace_seconds`, and `expected_status` are included. These fields are additive; receivers should tolerate absent optional fields and unknown fields.
 
-Alerts are queued only when a failure or recovery threshold is reached. Delivery is attempted during scheduler ticks, not directly on heartbeat receipt or channel creation. Monitor cadence, heartbeat grace, consecutive-check thresholds, the scheduler invocation schedule, and retry backoff all affect when an alert arrives. A change to degraded alone does not create an incident alert.
+Automatic alerts are queued when a failure or recovery threshold is reached; publishing an incident update also queues a notification. Delivery is attempted during scheduler ticks, not directly on heartbeat receipt or channel creation. Monitor cadence, heartbeat grace, consecutive-check thresholds, the scheduler invocation schedule, and retry backoff all affect when an alert arrives. A change to degraded alone does not create an incident alert.
 
 The recovery type is `incident.resolved`. Delivery is **at least once**. Each channel has a stable `X-Uptivra-Delivery` ID across retries. Verify before parsing or taking action:
 
@@ -103,3 +103,15 @@ API clients may include `"group":"Discord bots"` in `POST /api/v1/channels`, or 
 Routing is evaluated when an incident event is queued. Changing the filter preserves already queued deliveries and retries, and a recovery is routed using the monitor's group at recovery time. Filters apply to both public and private monitors and are not an access-control boundary.
 
 Run `uptivra migrate` before deploying this version of the backend. Migration 003 preserves existing destinations with the all-groups default.
+
+### Incident details and progress updates
+
+In **Incidents**, expand **Add incident update** to publish investigation details, a cause, fix progress, or a post-incident explanation. Choose General update, Investigating, Cause identified, or Fix applied / monitoring. Notes are timestamped and append-only, including after recovery. They do not change measured health or resolve an incident; successful checks control recovery.
+
+Use `POST /api/v1/incidents/{id}/updates` with `{"status":"monitoring","message":"Fix deployed; watching recovery."}`. Requires an administrator session with matching Origin or a write API key. Stages are `update`, `investigating`, `identified`, and `monitoring`. Messages contain 1–2000 UTF-8 bytes after trimming. Each incident permits up to 100 updates (409 when full); incident collections include an `updates` array in chronological order.
+
+**Notes for public monitors are public.** The status page shows the full timeline as literal text. Never include passwords, customer data, internal targets or other secrets. Private monitor notes remain hidden from public status, but assigned channel recipients receive them. Changing monitor visibility also changes visibility of its existing notes. Notes are deleted with their incident by retention cleanup or monitor deletion.
+
+Publishing atomically queues `incident.updated` to the monitor's current group destinations. Signed webhooks include an `update` object (`id`, `status`, `message`, `created_at`), and `resolved_at` when already recovered. Discord sends a blue embed with the stage, note and status-page link. Long escaped Discord text may be truncated; the status page retains the complete note. Delivery uses the existing scheduler and durable retries, so it is not immediate and may arrive out of order.
+
+Run `uptivra migrate` before deploying the updated backend. Migration 004 adds the incident update timeline; no new environment variables are needed.

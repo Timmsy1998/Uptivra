@@ -133,11 +133,12 @@ func Transition(status string, failures, successes int, ok bool, failureThreshol
 }
 
 type Incident struct {
-	ID         string     `json:"id"`
-	MonitorID  string     `json:"monitor_id"`
-	Name       string     `json:"name"`
-	OpenedAt   time.Time  `json:"opened_at"`
-	ResolvedAt *time.Time `json:"resolved_at"`
+	Updates    []IncidentUpdate `json:"updates"`
+	ID         string           `json:"id"`
+	MonitorID  string           `json:"monitor_id"`
+	Name       string           `json:"name"`
+	OpenedAt   time.Time        `json:"opened_at"`
+	ResolvedAt *time.Time       `json:"resolved_at"`
 }
 type Settings struct {
 	Title         string `json:"title"`
