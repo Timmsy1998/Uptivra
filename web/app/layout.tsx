@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
+  icons: { icon: "/icon.svg" },
   title: { default: "Uptivra — service health", template: "%s · Uptivra" },
   description:
     "Service availability, measured. Uptime monitoring and incident history.",
