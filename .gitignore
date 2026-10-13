@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+node_modules/
+.next/
+.next-dev/
+playwright-report/
+test-results/
+coverage*
+bin/
+.vercel/
+*.log
