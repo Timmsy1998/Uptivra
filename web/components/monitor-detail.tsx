@@ -19,8 +19,12 @@ export default function MonitorDetail({
     path: string;
   } | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [copyNotice, setCopyNotice] = useState("");
   useEffect(() => {
     setCredential(null);
+    setTokenVisible(false);
+    setCopyNotice("");
   }, [monitor.id]);
   async function generateToken() {
     if (
@@ -31,6 +35,8 @@ export default function MonitorDetail({
       return;
     setGenerating(true);
     setCredential(null);
+    setTokenVisible(false);
+    setCopyNotice("");
     try {
       setCredential(
         await api("/monitors/" + monitor.id + "/heartbeat-token", "POST"),
@@ -119,11 +125,45 @@ export default function MonitorDetail({
                 <input
                   className="mono"
                   readOnly
-                  type="password"
+                  type={tokenVisible ? "text" : "password"}
+                  autoComplete="off"
+                  spellCheck={false}
                   value={credential.token}
                   onFocus={(e) => e.currentTarget.select()}
                 />
               </label>
+              <div className="wide token-actions">
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => setTokenVisible((visible) => !visible)}
+                >
+                  {tokenVisible ? "Hide token" : "Show token"}
+                </button>
+                <button
+                  className="button"
+                  type="button"
+                  onClick={async () => {
+                    setCopyNotice("");
+                    try {
+                      await navigator.clipboard.writeText(credential.token);
+                      setCopyNotice("Token copied to clipboard.");
+                    } catch {
+                      setTokenVisible(true);
+                      setCopyNotice(
+                        "Clipboard unavailable. Select the visible token and copy it manually.",
+                      );
+                    }
+                  }}
+                >
+                  Copy token
+                </button>
+              </div>
+              {copyNotice && (
+                <p className="wide" role="status">
+                  {copyNotice}
+                </p>
+              )}
               <small>
                 Copy the token into your bot’s environment. Leaving this monitor
                 clears it from the screen.

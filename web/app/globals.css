@@ -936,6 +936,11 @@ td small {
   max-width: 320px;
   overflow-wrap: anywhere;
 }
+.token-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .token {
   border: 1px solid var(--accent);
   padding: 15px;

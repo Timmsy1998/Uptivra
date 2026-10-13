@@ -41,6 +41,38 @@ test("heartbeat creation, one-time token and authenticated receipt", async ({
   const tokenInput = page.getByLabel("Bearer token (save now; shown once)");
   const token = await tokenInput.inputValue();
   expect(token.length).toBeGreaterThan(32);
+  await expect(tokenInput).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Show token", exact: true }).click();
+  await expect(tokenInput).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Hide token", exact: true }).click();
+  await expect(tokenInput).toHaveAttribute("type", "password");
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          // A test clipboard avoids OS clipboard permissions in headless browsers.
+          document.documentElement.dataset.copiedToken = value;
+        },
+      },
+    });
+  });
+  await page.getByRole("button", { name: "Copy token", exact: true }).click();
+  await expect(
+    page.getByText("Token copied to clipboard.", { exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.dataset.copiedToken),
+  ).toBe(token);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", { value: undefined });
+    delete document.documentElement.dataset.copiedToken;
+  });
+  await page.getByRole("button", { name: "Copy token", exact: true }).click();
+  await expect(
+    page.getByText("Clipboard unavailable.", { exact: false }),
+  ).toBeVisible();
+  await expect(tokenInput).toHaveAttribute("type", "text");
   expect((await request.post(url)).status()).toBe(401);
   expect(
     (
@@ -49,6 +81,10 @@ test("heartbeat creation, one-time token and authenticated receipt", async ({
   ).toBe(204);
   await generate.click();
   await expect(tokenInput).not.toHaveValue(token);
+  await expect(tokenInput).toHaveAttribute("type", "password");
+  await expect(
+    page.getByText("Clipboard unavailable.", { exact: false }),
+  ).toHaveCount(0);
   expect(
     (
       await request.post(url, { headers: { Authorization: `Bearer ${token}` } })
