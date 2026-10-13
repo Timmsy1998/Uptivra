@@ -1,0 +1,7 @@
+.git
+.env*
+AGENTS.md
+web
+node_modules
+bin
+docs

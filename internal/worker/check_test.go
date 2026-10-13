@@ -2,11 +2,12 @@ package worker
 
 import (
 	"context"
-	"github.com/timmsy1998/uptivra/internal/domain"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"uptivra/internal/domain"
 )
 
 func TestExecution(t *testing.T) {

@@ -2,9 +2,10 @@ package server
 
 import (
 	"fmt"
-	"github.com/timmsy1998/uptivra/internal/domain"
 	"net/http"
 	"time"
+
+	"uptivra/internal/domain"
 )
 
 type PublicMonitor struct {

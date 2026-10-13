@@ -4,17 +4,19 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
-	"github.com/jackc/pgx/v5"
-	"github.com/timmsy1998/uptivra/internal/config"
-	"github.com/timmsy1998/uptivra/internal/cryptobox"
-	"github.com/timmsy1998/uptivra/internal/domain"
-	"github.com/timmsy1998/uptivra/internal/store"
-	"github.com/timmsy1998/uptivra/internal/worker"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"uptivra/internal/config"
+	"uptivra/internal/cryptobox"
+	"uptivra/internal/domain"
+	"uptivra/internal/store"
+	"uptivra/internal/worker"
 )
 
 type Server struct {

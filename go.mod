@@ -1,4 +1,4 @@
-module github.com/timmsy1998/uptivra
+module uptivra
 
 go 1.27.0
 

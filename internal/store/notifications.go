@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/timmsy1998/uptivra/internal/cryptobox"
-	"github.com/timmsy1998/uptivra/internal/netguard"
 	"time"
+
+	"uptivra/internal/cryptobox"
+	"uptivra/internal/netguard"
 )
 
 type Channel struct {

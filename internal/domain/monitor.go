@@ -2,10 +2,11 @@ package domain
 
 import (
 	"errors"
-	"github.com/timmsy1998/uptivra/internal/netguard"
 	"net/http"
 	"strings"
 	"time"
+
+	"uptivra/internal/netguard"
 )
 
 type Monitor struct {

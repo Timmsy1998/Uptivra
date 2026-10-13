@@ -3,9 +3,11 @@ package store
 import (
 	"context"
 	"errors"
-	"github.com/timmsy1998/uptivra/internal/cryptobox"
-	"golang.org/x/crypto/bcrypt"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
+
+	"uptivra/internal/cryptobox"
 )
 
 func (s *Store) Bootstrap(ctx context.Context, email, password string) error {

@@ -2,17 +2,18 @@ package main
 
 import (
 	"context"
-	"github.com/timmsy1998/uptivra/internal/config"
-	"github.com/timmsy1998/uptivra/internal/cryptobox"
-	"github.com/timmsy1998/uptivra/internal/server"
-	"github.com/timmsy1998/uptivra/internal/store"
-	"github.com/timmsy1998/uptivra/internal/worker"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"uptivra/internal/config"
+	"uptivra/internal/cryptobox"
+	"uptivra/internal/server"
+	"uptivra/internal/store"
+	"uptivra/internal/worker"
 )
 
 func main() {
@@ -52,6 +53,28 @@ func run() error {
 		report, e := worker.Tick(ctx, s)
 		slog.Info("tick finished", "claimed", report.Claimed, "recorded", report.Recorded, "delivered", report.Delivered)
 		return e
+	case "schedule":
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			if ctx.Err() != nil {
+				return nil
+			}
+			report, err := worker.Tick(ctx, s)
+			if ctx.Err() != nil {
+				return nil
+			}
+			if err != nil {
+				slog.Error("tick failed")
+			} else {
+				slog.Info("tick finished", "claimed", report.Claimed, "recorded", report.Recorded, "delivered", report.Delivered)
+			}
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+			}
+		}
 	case "serve":
 		srv := &http.Server{Addr: ":" + c.Port, Handler: (&server.Server{Store: s, Config: c}).Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 32 << 10}
 		done := make(chan error, 1)
@@ -72,4 +95,6 @@ func run() error {
 
 type commandError struct{}
 
-func (*commandError) Error() string { return "command must be serve, migrate, bootstrap or tick" }
+func (*commandError) Error() string {
+	return "command must be serve, migrate, bootstrap, tick or schedule"
+}

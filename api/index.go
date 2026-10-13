@@ -1,15 +1,18 @@
-// Package handler is the Vercel Go Function adapter. All application logic is shared with cmd/uptivra.
-package handler
+// Package uptivra is the Vercel Go Function adapter. All application logic is shared with cmd/uptivra.
+// Keep the package and module names aligned: the Vercel Go builder uses the
+// package name when synthesizing its module and internal imports must stay local.
+package uptivra
 
 import (
 	"context"
-	"github.com/timmsy1998/uptivra/internal/config"
-	"github.com/timmsy1998/uptivra/internal/cryptobox"
-	"github.com/timmsy1998/uptivra/internal/server"
-	"github.com/timmsy1998/uptivra/internal/store"
 	"net/http"
 	"sync"
 	"time"
+
+	"uptivra/internal/config"
+	"uptivra/internal/cryptobox"
+	"uptivra/internal/server"
+	"uptivra/internal/store"
 )
 
 var mu sync.Mutex

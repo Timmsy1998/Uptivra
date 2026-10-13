@@ -2,13 +2,14 @@ package store_test
 
 import (
 	"context"
-	"github.com/timmsy1998/uptivra/internal/domain"
-	"github.com/timmsy1998/uptivra/internal/store"
-	"github.com/timmsy1998/uptivra/internal/testutil"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"uptivra/internal/domain"
+	"uptivra/internal/store"
+	"uptivra/internal/testutil"
 )
 
 func monitor(id string) domain.Monitor {

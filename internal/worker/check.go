@@ -2,12 +2,13 @@ package worker
 
 import (
 	"context"
-	"github.com/timmsy1998/uptivra/internal/domain"
-	"github.com/timmsy1998/uptivra/internal/netguard"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"uptivra/internal/domain"
+	"uptivra/internal/netguard"
 )
 
 type Doer interface {
@@ -26,7 +27,7 @@ func Execute(ctx context.Context, m domain.Monitor, client Doer) domain.Check {
 	if e != nil {
 		return c
 	}
-	req.Header.Set("User-Agent", "Uptivra/1.0 (+https://github.com/timmsy1998/uptivra)")
+	req.Header.Set("User-Agent", "Uptivra/1.0 (+https://uptivra)")
 	for k, v := range m.Headers {
 		req.Header.Set(k, v)
 	}

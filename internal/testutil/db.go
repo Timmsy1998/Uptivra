@@ -4,12 +4,14 @@ package testutil
 import (
 	"context"
 	"encoding/base64"
-	"github.com/jackc/pgx/v5"
-	"github.com/timmsy1998/uptivra/internal/cryptobox"
-	"github.com/timmsy1998/uptivra/internal/store"
 	"net/url"
 	"os"
 	"testing"
+
+	"github.com/jackc/pgx/v5"
+
+	"uptivra/internal/cryptobox"
+	"uptivra/internal/store"
 )
 
 func DB(t *testing.T) *store.Store {

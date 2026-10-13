@@ -3,10 +3,11 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"github.com/timmsy1998/uptivra/internal/store"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"uptivra/internal/store"
 )
 
 func TestWebhookSigningAndFailures(t *testing.T) {

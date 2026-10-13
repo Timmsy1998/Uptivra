@@ -8,13 +8,14 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/timmsy1998/uptivra/internal/netguard"
-	"github.com/timmsy1998/uptivra/internal/store"
 	"net/http"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"uptivra/internal/netguard"
+	"uptivra/internal/store"
 )
 
 type Report struct {

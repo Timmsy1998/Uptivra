@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/timmsy1998/uptivra/internal/config"
-	"github.com/timmsy1998/uptivra/internal/domain"
-	"github.com/timmsy1998/uptivra/internal/testutil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"uptivra/internal/config"
+	"uptivra/internal/domain"
+	"uptivra/internal/testutil"
 )
 
 func TestAuthorizationCRUDAndPublicRedaction(t *testing.T) {
