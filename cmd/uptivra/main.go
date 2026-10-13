@@ -58,7 +58,7 @@ func run() error {
 		slog.Info("administrator password reset; browser sessions revoked")
 		return nil
 	case "tick":
-		report, e := worker.Tick(ctx, s)
+		report, e := worker.Tick(ctx, s, c.Origin)
 		slog.Info("tick finished", "claimed", report.Claimed, "recorded", report.Recorded, "delivered", report.Delivered)
 		return e
 	case "schedule":
@@ -68,7 +68,7 @@ func run() error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			report, err := worker.Tick(ctx, s)
+			report, err := worker.Tick(ctx, s, c.Origin)
 			if ctx.Err() != nil {
 				return nil
 			}

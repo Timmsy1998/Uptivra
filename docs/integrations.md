@@ -76,6 +76,10 @@ Example payload (IDs are opaque):
 }
 ```
 
+New events also include an `opened_at` timestamp, `interval_seconds`, `failure_threshold`, `recovery_threshold`, and a `check` snapshot (`checked_at`, `ok`, `latency_ms`, `status_code`, `reason`). When applicable, `monitor_group`, `monitor_type`, `grace_seconds`, and `expected_status` are included. These fields are additive; receivers should tolerate absent optional fields and unknown fields.
+
+Alerts are queued only when a failure or recovery threshold is reached. Delivery is attempted during scheduler ticks, not directly on heartbeat receipt or channel creation. Monitor cadence, heartbeat grace, consecutive-check thresholds, the scheduler invocation schedule, and retry backoff all affect when an alert arrives. A change to degraded alone does not create an incident alert.
+
 The recovery type is `incident.resolved`. Delivery is **at least once**. Each channel has a stable `X-Uptivra-Delivery` ID across retries. Verify before parsing or taking action:
 
 1. Read the raw request body with a size limit.
@@ -86,7 +90,9 @@ The recovery type is `incident.resolved`. Delivery is **at least once**. Each ch
 
 Timestamps and signatures are renewed on retries; do not deduplicate by timestamp. A receiver should acknowledge with 2xx promptly after durable acceptance. Non-2xx, network failures and timeouts retry up to **eight total attempts**. Backoff is 1, 2, 4, 8, 16, 32 and 64 minutes, rounded to scheduler runs. Terminal failures remain in the database for 30 days; there is no retry/replay UI yet. Monitor the outbox as described in [operations](operations.md).
 
-Discord channels accept a Discord webhook URL and use Discord's native JSON payload. Mention parsing is disabled. They share durable retry behavior, but do not use Uptivra HMAC headers. Destinations use the same guarded public-network client as monitor checks.
+Discord channels accept a Discord webhook URL and send a branded embed: red for an incident opening and green for recovery. Details include monitor name and group, monitor type, check result, interval and thresholds, incident identifiers, localized detection/opening/recovery times, and incident duration on recovery. HTTP events include response code and latency; heartbeat events include grace period instead. Targets, request headers, response bodies and credentials are excluded. Mention parsing is disabled; monitor labels are escaped and bounded to [Discord's embed limits](https://github.com/discord/discord-api-docs/blob/main/developers/resources/message.mdx#embed-limits). Older queued events still send an embed with only their available details. They share durable retry behavior, but do not use Uptivra HMAC headers. Destinations use the same guarded public-network client as monitor checks.
+
+Discord embeds include a **View status page** link for service status and incident updates, and the embed title is clickable. The destination is `APP_ORIGIN` followed by `/status`; set the backend’s `APP_ORIGIN` to your frontend origin (for example, `https://uptime.timmsy.dev`). This also applies to previously queued notifications.
 
 ### Group routing for Discord and signed webhooks
 

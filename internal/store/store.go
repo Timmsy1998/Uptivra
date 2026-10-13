@@ -325,15 +325,19 @@ func (s *Store) Record(ctx context.Context, m domain.Monitor, c domain.Check) er
 	}
 	if event != "" {
 		incidentID := cryptobox.Token()
+		var openedAt time.Time
 		if event == "opened" {
-			_, e = tx.Exec(ctx, `INSERT INTO incidents(id,monitor_id) VALUES($1,$2)`, incidentID, m.ID)
+			e = tx.QueryRow(ctx, `INSERT INTO incidents(id,monitor_id) VALUES($1,$2) RETURNING opened_at`, incidentID, m.ID).Scan(&openedAt)
 		} else {
-			e = tx.QueryRow(ctx, `UPDATE incidents SET resolved_at=now() WHERE monitor_id=$1 AND resolved_at IS NULL RETURNING id`, m.ID).Scan(&incidentID)
+			e = tx.QueryRow(ctx, `UPDATE incidents SET resolved_at=now() WHERE monitor_id=$1 AND resolved_at IS NULL RETURNING id,opened_at`, m.ID).Scan(&incidentID, &openedAt)
 		}
 		if e != nil {
 			return e
 		}
-		payload, _ := json.Marshal(map[string]any{"id": cryptobox.Token(), "type": "incident." + event, "incident_id": incidentID, "monitor_id": m.ID, "monitor_name": m.Name, "at": c.At})
+		payload, e := json.Marshal(domain.IncidentEvent{ID: cryptobox.Token(), Type: "incident." + event, IncidentID: incidentID, MonitorID: m.ID, MonitorName: m.Name, At: c.At, OpenedAt: openedAt, Group: m.Group, MonitorType: m.Type, Interval: m.Interval, Grace: m.Grace, FailureThreshold: m.FailureThreshold, RecoveryThreshold: m.RecoveryThreshold, ExpectedStatus: m.ExpectedStatus, Check: &c})
+		if e != nil {
+			return fmt.Errorf("encode incident notification: %w", e)
+		}
 		_, e = tx.Exec(ctx, `INSERT INTO deliveries(id,channel_id,payload) SELECT $1||':'||id,id,$2 FROM channels WHERE monitor_group IS NULL OR monitor_group=$3`, cryptobox.Token(), payload, m.Group)
 		if e != nil {
 			return e

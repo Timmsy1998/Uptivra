@@ -6,10 +6,9 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,7 +25,7 @@ type Report struct {
 }
 
 // Tick waits for all work; no goroutines survive a serverless invocation.
-func Tick(ctx context.Context, s *store.Store) (Report, error) {
+func Tick(ctx context.Context, s *store.Store, appOrigin string) (Report, error) {
 	var report Report
 	ctx, cancel := context.WithTimeout(ctx, 55*time.Second)
 	defer cancel()
@@ -74,7 +73,7 @@ func Tick(ctx context.Context, s *store.Store) (Report, error) {
 	var delivered atomic.Int64
 	parallel(len(ds), 8, func(i int) {
 		d := ds[i]
-		ok := Send(ctx, d, netguard.Client(5*time.Second))
+		ok := Send(ctx, d, netguard.Client(5*time.Second), strings.TrimSuffix(appOrigin, "/")+"/status")
 		if e := s.FinishDelivery(ctx, d, ok); e != nil {
 			fail(e)
 		} else if ok {
@@ -109,19 +108,16 @@ func Signature(secret, timestamp string, body []byte) string {
 	mac.Write(body)
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
-func Send(ctx context.Context, d store.Delivery, client Doer) bool {
+func Send(ctx context.Context, d store.Delivery, client Doer, statusPageURL string) bool {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	body := []byte(d.Payload)
 	if d.Channel.Kind == "discord" {
-		var p struct {
-			Type string `json:"type"`
-			Name string `json:"monitor_name"`
-		}
-		if json.Unmarshal(body, &p) != nil {
+		var e error
+		body, e = discordPayload(body, statusPageURL)
+		if e != nil {
 			return false
 		}
-		body, _ = json.Marshal(map[string]any{"content": fmt.Sprintf("%s — %s", p.Name, p.Type), "allowed_mentions": map[string]any{"parse": []string{}}})
 	}
 	req, e := http.NewRequestWithContext(ctx, http.MethodPost, d.Channel.URL, bytes.NewReader(body))
 	if e != nil {

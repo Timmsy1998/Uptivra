@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -93,6 +94,21 @@ func TestClaimsIncidentsAndSecrets(t *testing.T) {
 	ds, e := s.ClaimDeliveries(ctx)
 	if e != nil || len(ds) != 2 {
 		t.Fatalf("outbox %d %v", len(ds), e)
+	}
+	for _, delivery := range ds {
+		var event domain.IncidentEvent
+		if err := json.Unmarshal(delivery.Payload, &event); err != nil {
+			t.Fatal(err)
+		}
+		if event.MonitorID != m.ID || event.MonitorName != m.Name || event.OpenedAt.IsZero() || event.At.IsZero() || event.Check == nil || event.Interval != 60 || event.ExpectedStatus != 200 || event.FailureThreshold != 2 || event.RecoveryThreshold != 2 {
+			t.Fatalf("incomplete notification snapshot: %+v", event)
+		}
+		if event.Type == "incident.resolved" && (!event.Check.OK || event.At.Before(event.OpenedAt)) {
+			t.Fatal("invalid recovery snapshot")
+		}
+		if strings.Contains(string(delivery.Payload), m.URL) || strings.Contains(string(delivery.Payload), "secret-value") {
+			t.Fatal("private target or credentials in notification")
+		}
 	}
 	again, _ := s.ClaimDeliveries(ctx)
 	if len(again) != 0 {

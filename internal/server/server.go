@@ -219,7 +219,7 @@ func (s *Server) cron(w http.ResponseWriter, r *http.Request) {
 		problem(w, 401, "scheduler authentication required")
 		return
 	}
-	report, e := worker.Tick(r.Context(), s.Store)
+	report, e := worker.Tick(r.Context(), s.Store, s.Config.Origin)
 	if dbError(w, e) {
 		return
 	}

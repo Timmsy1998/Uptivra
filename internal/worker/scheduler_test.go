@@ -24,11 +24,11 @@ func TestWebhookSigningAndFailures(t *testing.T) {
 	}))
 	defer srv.Close()
 	d.Channel.URL = srv.URL
-	if !Send(context.Background(), d, srv.Client()) {
+	if !Send(context.Background(), d, srv.Client(), "https://uptime.example.com/status") {
 		t.Fatal("delivery failed")
 	}
 	d.Channel.URL = ":"
-	if Send(context.Background(), d, srv.Client()) {
+	if Send(context.Background(), d, srv.Client(), "https://uptime.example.com/status") {
 		t.Fatal("bad destination accepted")
 	}
 }
