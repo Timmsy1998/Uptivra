@@ -22,6 +22,10 @@ These are screenshots of the running application, captured by its browser workfl
 
 The current scope is one administrator, one public status page and public-network HTTP(S) endpoints on ports 80/443. TCP/DNS checks, TLS-expiry alerts, email, geographic probes, multiple users and status-page domains are future work. Private-network monitoring is deliberately blocked. There is no billing, audit log or alert replay interface.
 
+## Try a temporary demo
+
+Deploy just the `web` frontend to Vercel with `NEXT_PUBLIC_DEMO_MODE=true`. Visitors can try monitor configuration, editing and a local status preview without accounts or a database. Each tab keeps its own temporary workspace for up to two hours; nothing is sent to the API. Live checks and alerts require the full installation, and the demo never invents measurements. See [demo deployment and limits](docs/deployment.md#temporary-browser-demo-on-vercel).
+
 ## Run locally
 
 Requires Docker Engine with Compose v2 or newer. For native Go/Node development, see [deployment](docs/deployment.md#native-development).

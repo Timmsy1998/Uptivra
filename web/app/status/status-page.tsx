@@ -1,4 +1,5 @@
 "use client";
+import { demoMode } from "@/lib/demo-mode";
 import { useEffect, useState } from "react";
 import { ArrowUpRight, RefreshCw } from "lucide-react";
 import { api, type PublicStatus, percent, ms, date } from "@/lib/api";
@@ -10,6 +11,7 @@ import {
   ErrorMessage,
   Empty,
 } from "@/components/shared";
+import DemoBanner from "@/components/demo-banner";
 const summary: Record<string, string> = {
   healthy: "All services operational",
   degraded: "Some services are degraded",
@@ -61,8 +63,11 @@ export default function StatusPage() {
         </div>
       </header>
       <main>
+        <DemoBanner />
         <div className="public-title">
-          <span className="eyebrow">Live service health</span>
+          <span className="eyebrow">
+            {demoMode ? "Local status preview" : "Live service health"}
+          </span>
           <h1>{data?.title || "Service status"}</h1>
           <p>{data?.description || "Availability and incident history."}</p>
         </div>

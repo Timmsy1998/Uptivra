@@ -1,3 +1,4 @@
+import { demoMode } from "./demo-mode";
 export type Monitor = {
   id: string;
   name: string;
@@ -80,6 +81,10 @@ export async function api<T>(
   method = "GET",
   body?: unknown,
 ): Promise<T> {
+  if (demoMode) {
+    const { demoAPI } = await import("./demo");
+    return demoAPI<T>(path, method, body);
+  }
   const r = await fetch("/api/v1" + path, {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,

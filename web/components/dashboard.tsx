@@ -1,4 +1,5 @@
 "use client";
+import { demoMode } from "@/lib/demo-mode";
 import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
@@ -39,6 +40,7 @@ import MonitorDetail from "./monitor-detail";
 import SettingsPanel from "./settings";
 import Channels from "./channels";
 import Login from "./login";
+import DemoBanner from "./demo-banner";
 type View = "monitors" | "incidents" | "channels" | "settings";
 export default function Dashboard() {
   const [auth, setAuth] = useState<boolean | null>(null);
@@ -108,6 +110,17 @@ export default function Dashboard() {
         <p>Connecting to monitoring service…</p>
       </main>
     );
+  if (!auth && demoMode)
+    return (
+      <main className="boot">
+        <Brand />
+        <DemoBanner />
+        <ErrorMessage message={error} />
+        <button className="button" onClick={() => window.location.reload()}>
+          Retry demo
+        </button>
+      </main>
+    );
   if (!auth)
     return (
       <Login
@@ -170,7 +183,11 @@ export default function Dashboard() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <a href="/status" target="_blank" rel="noreferrer">
+          <a
+            href="/status"
+            target={demoMode ? "_self" : "_blank"}
+            rel="noreferrer"
+          >
             <ArrowUpRight size={17} />
             Public status page
           </a>
@@ -189,7 +206,7 @@ export default function Dashboard() {
           <div className="top-actions">
             <span className="live-indicator">
               <i />
-              Live data
+              {demoMode ? "Local demo" : "Live data"}
             </span>
             <button
               className="icon-button"
@@ -199,21 +216,24 @@ export default function Dashboard() {
             >
               <RefreshCw size={16} className={loading ? "spin" : ""} />
             </button>
-            <button
-              className="icon-button"
-              aria-label="Sign out"
-              onClick={() =>
-                void action(async () => {
-                  await api("/auth/logout", "POST");
-                  setAuth(false);
-                }, "Signed out.")
-              }
-            >
-              <LogOut size={16} />
-            </button>
+            {!demoMode && (
+              <button
+                className="icon-button"
+                aria-label="Sign out"
+                onClick={() =>
+                  void action(async () => {
+                    await api("/auth/logout", "POST");
+                    setAuth(false);
+                  }, "Signed out.")
+                }
+              >
+                <LogOut size={16} />
+              </button>
+            )}
           </div>
         </header>
         <main className="content">
+          <DemoBanner />
           <ErrorMessage message={error} />
           {notice && (
             <div className="notice" role="status">
@@ -329,8 +349,9 @@ export default function Dashboard() {
                           : "Your first endpoint starts here"
                       }
                     >
-                      Add a service you own. Uptivra will record checks, track
-                      incidents and notify your team.
+                      {demoMode
+                        ? "Add an example endpoint to try the configuration workflow. No requests will be sent."
+                        : "Add a service you own. Uptivra will record checks, track incidents and notify your team."}
                       <button
                         className="button"
                         onClick={() => setEditor("new")}
@@ -465,7 +486,11 @@ export default function Dashboard() {
                     </div>
                   )}
                   <div className="panel-footer">
-                    <span>HTTP & HTTPS · scheduled checks</span>
+                    <span>
+                      {demoMode
+                        ? "Configuration preview · checks disabled"
+                        : "HTTP & HTTPS · scheduled checks"}
+                    </span>
                     <span>Uptime is measured from recorded checks.</span>
                   </div>
                 </section>
@@ -496,7 +521,7 @@ export default function Dashboard() {
                     <a
                       className="button"
                       href="/status"
-                      target="_blank"
+                      target={demoMode ? "_self" : "_blank"}
                       rel="noreferrer"
                     >
                       Open status page

@@ -1,4 +1,5 @@
 "use client";
+import { demoMode } from "@/lib/demo-mode";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Settings2 } from "lucide-react";
 import { api, type Monitor, type Check, date, ms, percent } from "@/lib/api";
@@ -98,8 +99,9 @@ export default function MonitorDetail({
           <Empty
             title={loading ? "Loading checks…" : "Awaiting the first check"}
           >
-            The scheduler checks this endpoint every {monitor.interval_seconds}{" "}
-            seconds when enabled.
+            {demoMode
+              ? "Live checks are disabled in this demo. No measurements will be collected."
+              : `The scheduler checks this endpoint every ${monitor.interval_seconds} seconds when enabled.`}
           </Empty>
         )}
         <p className="footnote">

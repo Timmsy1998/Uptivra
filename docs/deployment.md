@@ -11,6 +11,7 @@ Choose one scheduler: Vercel cron, `uptivra schedule`, or an external minute job
 | `CRON_SECRET` | Go processes/function | At least 32 bytes; generate independently with `openssl rand -hex 32` |
 | `APP_ORIGIN` | Go processes/function | Exact browser origin, e.g. `https://status.example.com`; no path, query or fragment. HTTP is accepted only for localhost development |
 | `PORT` | Native Go server | Default `8080` |
+| `NEXT_PUBLIC_DEMO_MODE` | Next.js build | Set exactly `true` for the temporary browser demo; unset for normal authenticated operation. Rebuild when changing |
 | `API_ORIGIN` | Next.js server | Fixed Go backend origin; never a `NEXT_PUBLIC_` variable |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | Next.js server, optional | Backend Vercel deployment-protection bypass; keep server-side |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Bootstrap command only | Initial account; password 14–72 bytes. Bootstrap refuses to replace an existing account |
@@ -96,6 +97,35 @@ HOSTNAME=127.0.0.1 PORT=3000 node web/.next/standalone/server.js
 ```
 
 Copy into a fresh artifact directory on subsequent releases so stale assets do not accumulate.
+
+## Temporary browser demo on Vercel
+
+Deploy **one frontend project**, without PostgreSQL, the Go API, cron, or an administrator account:
+
+1. Import this repository into a new Vercel project. Set **Root Directory** to `web` and **Framework Preset** to **Next.js**. Use the default install/build commands (`npm ci`, `npm run build`); do not use the repository-root Go `vercel.json`.
+2. Set `NEXT_PUBLIC_DEMO_MODE=true` for the environments you want to demo (Production and/or Preview) **before building**. Leave `API_ORIGIN`, database variables, encryption keys, cron secrets and bypass secrets unset. No backend project is needed.
+3. Deploy. Open `/`, create an example monitor, edit/pause/resume/delete it, change the status-page title in Settings, and open `/status` from the workspace. The preview stays in the same tab. Another browser or fresh tab starts with an independent workspace.
+4. Confirm the “Temporary browser demo” banner is visible and no `/api/v1` calls appear in the browser network panel. Direct `/api/v1/*` requests return 403, even if an API origin was accidentally configured.
+
+The flag is baked into the browser **and proxy** at build time. Changing it requires a new build/deployment; there is no URL switch. Keep demo and production in separate Vercel projects. Vercel documents [root-directory configuration](https://vercel.com/docs/builds/configure-a-build); Next.js documents [build-time public variables](https://nextjs.org/docs/app/guides/environment-variables).
+
+This is a configuration and interface demo, not an uptime measurement service. It starts empty, holds at most 50 monitors and uses `sessionStorage` in the visitor's tab. Reloading preserves edits. The workspace expires two hours after its first access and is discarded on the next read; **Reset demo** clears it immediately. Closing a tab normally clears session storage, but browser session restoration or tab duplication can restore/copy it. Browser storage must be enabled. Theme preference continues to use browser-local storage independently.
+
+No monitor configuration, credentials or history are sent to the application server. Vercel still serves the site and may retain ordinary hosting/access logs; this mode does not disable platform logging. Avoid adding analytics or third-party scripts if this boundary matters. Do not enter real secrets or sensitive URLs: browser-local data is readable by scripts on the same origin and anyone with access to that browser profile. The two-hour expiry is convenience cleanup, not secure erasure or an access-control boundary.
+
+Live HTTP checks, scheduling, incidents/recovery, alerts, login/passwords and API keys need the full backend and are unavailable. No synthetic uptime, response times or incident history are generated: enabled monitors stay unknown, paused/maintenance controls are configuration previews, and `/status` shows only locally marked-public monitors. It cannot be shared as a real public status page. Demo form validation is a UI aid; it does not verify the Go engine's network/security rules. Use a full isolated installation to evaluate those behaviors.
+
+Local preview and automated verification:
+
+```sh
+npm --prefix web ci
+NEXT_PUBLIC_DEMO_MODE=true npm --prefix web run build
+NEXT_PUBLIC_DEMO_MODE=true npm --prefix web run start
+# In another terminal, after stopping the preview if necessary:
+npm --prefix web run test:demo
+```
+
+The demo browser suite builds and starts a production frontend on port 3100 with the flag enabled. It covers isolated workspaces, CRUD, unknown metrics, settings/status preview, expiry/reset, and blocked API forwarding. Install Playwright Chromium and its system dependencies first. A remote Vercel demo deployment has not been verified from this workspace.
 
 ## Vercel Pro
 

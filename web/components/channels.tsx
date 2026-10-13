@@ -1,4 +1,5 @@
 "use client";
+import { demoMode } from "@/lib/demo-mode";
 import { useEffect, useState } from "react";
 import { Trash2, Webhook } from "lucide-react";
 import { api, type Channel } from "@/lib/api";
@@ -14,8 +15,21 @@ export default function Channels() {
       .then(setChannels)
       .catch((e) => setError(e.message));
   useEffect(() => {
-    void load();
+    if (!demoMode) void load();
   }, []);
+  if (demoMode)
+    return (
+      <section className="panel">
+        <div className="section-heading">
+          <h1>Notification channels</h1>
+        </div>
+        <p className="notice">
+          Alert delivery requires the full backend. No webhooks or Discord
+          messages are sent in demo mode. Do not enter real destinations or
+          signing secrets.
+        </p>
+      </section>
+    );
   return (
     <>
       <div className="page-heading">

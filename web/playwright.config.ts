@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
+  testIgnore: "demo.spec.ts",
   workers: 1,
   timeout: 90000,
   retries: 0,

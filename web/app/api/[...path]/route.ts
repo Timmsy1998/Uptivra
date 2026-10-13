@@ -1,8 +1,14 @@
+import { demoMode } from "@/lib/demo-mode";
 import { NextRequest } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 // Forward a fixed set of headers to a fixed backend; never accept a destination from the request.
 async function forward(request: NextRequest) {
+  if (demoMode)
+    return Response.json(
+      { error: "The API is disabled in this browser-only demo." },
+      { status: 403, headers: { "Cache-Control": "no-store" } },
+    );
   const base = process.env.API_ORIGIN;
   if (!base)
     return Response.json(

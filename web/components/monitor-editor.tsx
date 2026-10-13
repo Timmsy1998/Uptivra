@@ -1,4 +1,5 @@
 "use client";
+import { demoMode } from "@/lib/demo-mode";
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { api, type Monitor } from "@/lib/api";
@@ -212,9 +213,11 @@ export default function MonitorEditor({
           </label>
           <label className="wide">
             Request headers (JSON)
+            {demoMode && " — disabled in demo; never enter secrets"}
             <textarea
               className="mono"
               name="headers"
+              disabled={demoMode}
               rows={3}
               defaultValue={JSON.stringify(monitor?.headers || {}, null, 2)}
               spellCheck={false}
