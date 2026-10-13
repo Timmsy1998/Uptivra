@@ -22,6 +22,9 @@ var schema string
 //go:embed migrations/002_heartbeats.sql
 var heartbeatMigration string
 
+//go:embed migrations/003_channel_groups.sql
+var channelGroupsMigration string
+
 type Store struct {
 	DB  *pgxpool.Pool
 	Box *cryptobox.Box
@@ -59,13 +62,18 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if _, e = tx.Exec(ctx, schema); e != nil {
 		return e
 	}
-	var applied bool
-	if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_versions WHERE version=2)`).Scan(&applied); e != nil {
-		return e
-	}
-	if !applied {
-		if _, e = tx.Exec(ctx, heartbeatMigration); e != nil {
+	for _, migration := range []struct {
+		version int
+		sql     string
+	}{{2, heartbeatMigration}, {3, channelGroupsMigration}} {
+		var applied bool
+		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_versions WHERE version=$1)`, migration.version).Scan(&applied); e != nil {
 			return e
+		}
+		if !applied {
+			if _, e = tx.Exec(ctx, migration.sql); e != nil {
+				return e
+			}
 		}
 	}
 	return tx.Commit(ctx)
@@ -326,7 +334,7 @@ func (s *Store) Record(ctx context.Context, m domain.Monitor, c domain.Check) er
 			return e
 		}
 		payload, _ := json.Marshal(map[string]any{"id": cryptobox.Token(), "type": "incident." + event, "incident_id": incidentID, "monitor_id": m.ID, "monitor_name": m.Name, "at": c.At})
-		_, e = tx.Exec(ctx, `INSERT INTO deliveries(id,channel_id,payload) SELECT $1||':'||id,id,$2 FROM channels`, cryptobox.Token(), payload)
+		_, e = tx.Exec(ctx, `INSERT INTO deliveries(id,channel_id,payload) SELECT $1||':'||id,id,$2 FROM channels WHERE monitor_group IS NULL OR monitor_group=$3`, cryptobox.Token(), payload, m.Group)
 		if e != nil {
 			return e
 		}

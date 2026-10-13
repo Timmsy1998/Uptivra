@@ -61,7 +61,7 @@ Cookie-authenticated mutations require an exact `Origin` equal to `APP_ORIGIN`. 
 
 ## Incident webhooks
 
-Create a **webhook** channel with an authorized public HTTP(S) URL and an independent 32–256 byte signing secret. The URL and secret are encrypted in PostgreSQL and are never returned by the channel-list API. All configured channels receive all incident open/recovery events, including private monitor names; channel recipients are trusted operators.
+Create a **webhook** channel with an authorized public HTTP(S) URL and an independent 32–256 byte signing secret. The URL and secret are encrypted in PostgreSQL and are never returned by the channel-list API. Channels receive incident openings and recoveries for their selected monitor group, including private monitor names; channel recipients are trusted operators. Existing channels and new channels without a group filter receive all groups.
 
 Example payload (IDs are opaque):
 
@@ -87,3 +87,13 @@ The recovery type is `incident.resolved`. Delivery is **at least once**. Each ch
 Timestamps and signatures are renewed on retries; do not deduplicate by timestamp. A receiver should acknowledge with 2xx promptly after durable acceptance. Non-2xx, network failures and timeouts retry up to **eight total attempts**. Backoff is 1, 2, 4, 8, 16, 32 and 64 minutes, rounded to scheduler runs. Terminal failures remain in the database for 30 days; there is no retry/replay UI yet. Monitor the outbox as described in [operations](operations.md).
 
 Discord channels accept a Discord webhook URL and use Discord's native JSON payload. Mention parsing is disabled. They share durable retry behavior, but do not use Uptivra HMAC headers. Destinations use the same guarded public-network client as monitor checks.
+
+### Group routing for Discord and signed webhooks
+
+In **Notification channels**, choose **Monitor group** when adding a destination. Each destination can receive all groups, one exact group, or only ungrouped monitors. Change an existing destination with its **Group for …** selector; its URL and signing secret are retained. Group names are case-sensitive. Renaming or moving a monitor changes which destinations receive its future events. A destination whose group no longer exists receives no new events until a matching group exists again.
+
+API clients may include `"group":"Discord bots"` in `POST /api/v1/channels`, or send `{"group":"Discord bots"}` to `PUT /api/v1/channels/{id}/group`. Use `null` for all groups or `""` for ungrouped monitors. Channel administration requires a signed-in administrator and a valid Origin; API keys cannot change destinations.
+
+Routing is evaluated when an incident event is queued. Changing the filter preserves already queued deliveries and retries, and a recovery is routed using the monitor's group at recovery time. Filters apply to both public and private monitors and are not an access-control boundary.
+
+Run `uptivra migrate` before deploying this version of the backend. Migration 003 preserves existing destinations with the all-groups default.

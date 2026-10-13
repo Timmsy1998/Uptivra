@@ -53,3 +53,5 @@ Native/container deployments use `serve` and `schedule`, or an external minute s
 ## Heartbeats
 
 Migration 2 adds per-monitor hashed tokens and the last receipt timestamp. Receipt and recording lock the monitor row in the same order. Scheduled freshness evaluations use the database timestamp and enter the same fenced result/incident/outbox transaction as HTTP checks. Type is immutable; legacy monitors with no type remain HTTP. Receipts create no history; the scheduler records bounded observations. Heartbeat latency aggregates are null. See [setup and threat boundaries](heartbeats.md).
+
+Notification destinations store an optional exact monitor group separately from their encrypted delivery configuration. Incident transactions enqueue only matching destinations: SQL NULL selects all groups, an empty string selects ungrouped monitors. Routing edits affect future enqueue operations and preserve existing outbox records and retry behavior. Migration 003 adds this nullable field, retaining all-group routing for existing channels.

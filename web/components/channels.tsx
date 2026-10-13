@@ -2,20 +2,48 @@
 import { demoMode } from "@/lib/demo-mode";
 import { useEffect, useState } from "react";
 import { Trash2, Webhook } from "lucide-react";
-import { api, type Channel } from "@/lib/api";
+import { api, type Channel, type Monitor } from "@/lib/api";
 import { Empty, ErrorMessage } from "./shared";
 export default function Channels() {
   const [channels, setChannels] = useState<Channel[]>([]);
+  const [groups, setGroups] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [routingBusy, setRoutingBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [kind, setKind] = useState("webhook");
-  const load = () =>
-    api<Channel[]>("/channels")
-      .then(setChannels)
-      .catch((e) => setError(e.message));
+  const load = async () => {
+    const [destinations, monitors] = await Promise.all([
+      api<Channel[]>("/channels"),
+      api<Monitor[]>("/monitors"),
+    ]);
+    setChannels(destinations);
+    setGroups(
+      [
+        ...new Set([
+          "",
+          ...monitors.map((m) => m.group),
+          ...destinations.flatMap((c) => (c.group == null ? [] : [c.group])),
+        ]),
+      ].sort(),
+    );
+  };
+  const groupOptions = (
+    <>
+      <option value="null">All groups</option>
+      {groups.map((group) => (
+        <option key={group} value={JSON.stringify(group)}>
+          {group || "Ungrouped monitors"}
+        </option>
+      ))}
+    </>
+  );
   useEffect(() => {
-    if (!demoMode) void load();
+    if (!demoMode)
+      void load()
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false));
   }, []);
   if (demoMode)
     return (
@@ -49,8 +77,9 @@ export default function Channels() {
         <div>
           <h2>Add a destination</h2>
           <p>
-            Every channel receives incident openings and recoveries. Failed
-            deliveries make up to eight attempts with exponential backoff.
+            Choose all groups or one monitor group for incident openings and
+            recoveries. Failed deliveries make up to eight attempts with
+            exponential backoff.
           </p>
           <p>
             Webhook payloads are signed with HMAC-SHA256. Discord messages
@@ -70,11 +99,12 @@ export default function Channels() {
                 kind,
                 url: f.get("url"),
                 signing_secret: f.get("secret") || "",
+                group: JSON.parse(String(f.get("group"))),
               });
               form.reset();
               await load();
               setNotice(
-                "Channel created. It will receive the next incident event.",
+                "Channel created. It will receive matching incident events.",
               );
             } catch (e) {
               setError(
@@ -100,6 +130,15 @@ export default function Channels() {
               <option value="webhook">Signed webhook</option>
               <option value="discord">Discord webhook</option>
             </select>
+          </label>
+          <label>
+            Monitor group
+            <select name="group" defaultValue="null" disabled={loading}>
+              {groupOptions}
+            </select>
+            <small>
+              Only alerts from the selected group are sent to this destination.
+            </small>
           </label>
           <label>
             Destination URL
@@ -131,7 +170,7 @@ export default function Channels() {
               </small>
             </label>
           )}
-          <button className="button primary" disabled={busy}>
+          <button className="button primary" disabled={busy || loading}>
             <Webhook size={15} />
             {busy ? "Creating…" : "Create channel"}
           </button>
@@ -142,14 +181,48 @@ export default function Channels() {
           <h2>Configured destinations</h2>
           <span className="label">{channels.length} channels</span>
         </div>
-        {channels.length ? (
-          <div className="simple-list">
+        {loading ? (
+          <p role="status">Loading destinations…</p>
+        ) : channels.length ? (
+          <div className="simple-list channel-list">
             {channels.map((c) => (
               <div key={c.id}>
                 <div>
                   <strong>{c.name}</strong>
                   <small>{c.kind}</small>
                 </div>
+                <label>
+                  Group for {c.name}
+                  <select
+                    value={JSON.stringify(c.group ?? null)}
+                    disabled={routingBusy}
+                    onChange={async (e) => {
+                      const group: string | null = JSON.parse(e.target.value);
+                      setRoutingBusy(true);
+                      setError("");
+                      setNotice("");
+                      try {
+                        await api("/channels/" + c.id + "/group", "PUT", {
+                          group,
+                        });
+                        await load();
+                        setNotice(
+                          "Group updated for future incident events. Already queued deliveries are retained.",
+                        );
+                      } catch (e) {
+                        setError(
+                          e instanceof Error
+                            ? e.message
+                            : "Unable to update group",
+                        );
+                      } finally {
+                        setRoutingBusy(false);
+                      }
+                    }}
+                  >
+                    {groupOptions}
+                  </select>
+                </label>
                 <button
                   className="icon-button danger"
                   aria-label={"Delete " + c.name}

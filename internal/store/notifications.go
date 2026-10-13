@@ -6,20 +6,23 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"uptivra/internal/cryptobox"
 	"uptivra/internal/netguard"
 )
 
 type Channel struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Kind          string `json:"kind"`
-	URL           string `json:"url,omitempty"`
-	SigningSecret string `json:"signing_secret,omitempty"`
+	Group         *string `json:"group"`
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Kind          string  `json:"kind"`
+	URL           string  `json:"url,omitempty"`
+	SigningSecret string  `json:"signing_secret,omitempty"`
 }
 
 func (s *Store) Channels(ctx context.Context) ([]Channel, error) {
-	rows, e := s.DB.Query(ctx, `SELECT id,name,kind FROM channels ORDER BY created_at`)
+	rows, e := s.DB.Query(ctx, `SELECT id,name,kind,monitor_group FROM channels ORDER BY created_at`)
 	if e != nil {
 		return nil, e
 	}
@@ -27,7 +30,7 @@ func (s *Store) Channels(ctx context.Context) ([]Channel, error) {
 	out := []Channel{}
 	for rows.Next() {
 		var c Channel
-		if e = rows.Scan(&c.ID, &c.Name, &c.Kind); e != nil {
+		if e = rows.Scan(&c.ID, &c.Name, &c.Kind, &c.Group); e != nil {
 			return nil, e
 		}
 		out = append(out, c)
@@ -35,6 +38,9 @@ func (s *Store) Channels(ctx context.Context) ([]Channel, error) {
 	return out, rows.Err()
 }
 func (s *Store) CreateChannel(ctx context.Context, c Channel) error {
+	if c.Group != nil && len(*c.Group) > 80 {
+		return errors.New("group must contain at most 80 bytes")
+	}
 	if len(c.Name) < 1 || len(c.Name) > 80 || (c.Kind != "webhook" && c.Kind != "discord") {
 		return errors.New("name and webhook/discord kind required")
 	}
@@ -45,8 +51,23 @@ func (s *Store) CreateChannel(ctx context.Context, c Channel) error {
 		return errors.New("webhook signing secret must contain 32–256 bytes")
 	}
 	b, _ := json.Marshal(c)
-	_, e := s.DB.Exec(ctx, `INSERT INTO channels(id,name,kind,secret_config) VALUES($1,$2,$3,$4)`, cryptobox.Token(), c.Name, c.Kind, s.Box.Seal(string(b)))
+	_, e := s.DB.Exec(ctx, `INSERT INTO channels(id,name,kind,secret_config,monitor_group) VALUES($1,$2,$3,$4,$5)`, cryptobox.Token(), c.Name, c.Kind, s.Box.Seal(string(b)), c.Group)
 	return e
+}
+
+// UpdateChannelGroup changes routing for future incident events, retaining queued deliveries.
+func (s *Store) UpdateChannelGroup(ctx context.Context, id string, group *string) error {
+	if group != nil && len(*group) > 80 {
+		return errors.New("group must contain at most 80 bytes")
+	}
+	result, err := s.DB.Exec(ctx, `UPDATE channels SET monitor_group=$2 WHERE id=$1`, id, group)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }
 func (s *Store) DeleteChannel(ctx context.Context, id string) error {
 	_, e := s.DB.Exec(ctx, `DELETE FROM channels WHERE id=$1`, id)

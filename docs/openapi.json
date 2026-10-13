@@ -2265,6 +2265,123 @@
           }
         }
       }
+    },
+    "/api/v1/channels/{id}/group": {
+      "put": {
+        "summary": "Change the group for future incident notifications; queued deliveries are retained",
+        "operationId": "put_api_v1_channels_id_group",
+        "description": "",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin rejected or insufficient scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Channel not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "JSON content type required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uri"
+            },
+            "description": "Exact APP_ORIGIN"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelGroupInput"
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2813,6 +2930,14 @@
             "minLength": 32,
             "maxLength": 256,
             "description": "Required for webhook; ignored for Discord."
+          },
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 80,
+            "description": "Null selects all groups (default); empty string selects ungrouped monitors. Otherwise matches a monitor group exactly, including case. Limited to 80 UTF-8 bytes."
           }
         },
         "required": [
@@ -2853,12 +2978,21 @@
               "webhook",
               "discord"
             ]
+          },
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 80,
+            "description": "Null selects all groups (default); empty string selects ungrouped monitors. Otherwise matches a monitor group exactly, including case. Limited to 80 UTF-8 bytes."
           }
         },
         "required": [
           "id",
           "name",
-          "kind"
+          "kind",
+          "group"
         ]
       },
       "Key": {
@@ -3142,6 +3276,23 @@
           "monitors",
           "incidents"
         ]
+      },
+      "ChannelGroupInput": {
+        "type": "object",
+        "properties": {
+          "group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 80,
+            "description": "Null selects all groups (default); empty string selects ungrouped monitors. Otherwise matches a monitor group exactly, including case. Limited to 80 UTF-8 bytes."
+          }
+        },
+        "required": [
+          "group"
+        ],
+        "additionalProperties": false
       }
     }
   }

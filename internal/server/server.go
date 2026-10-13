@@ -56,6 +56,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/settings", s.auth(false, s.saveSettings))
 	mux.Handle("GET /api/v1/channels", s.auth(true, s.channels))
 	mux.Handle("POST /api/v1/channels", s.auth(true, s.createChannel))
+	mux.Handle("PUT /api/v1/channels/{id}/group", s.auth(true, s.channelGroup))
 	mux.Handle("DELETE /api/v1/channels/{id}", s.auth(true, s.deleteChannel))
 	mux.Handle("GET /api/v1/keys", s.auth(true, s.keys))
 	mux.Handle("POST /api/v1/keys", s.auth(true, s.createKey))
@@ -318,10 +319,27 @@ func (s *Server) createChannel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if e := s.Store.CreateChannel(r.Context(), v); e != nil {
-		problem(w, 400, "invalid channel: require a public HTTP(S) URL, name, provider, and 32–256 byte webhook secret")
+		problem(w, 400, "invalid channel: require a public HTTP(S) URL, name, provider, 32–256 byte webhook secret, and group of at most 80 bytes")
 		return
 	}
 	respond(w, 201, map[string]string{"status": "created"})
+}
+func (s *Server) channelGroup(w http.ResponseWriter, r *http.Request) {
+	var v struct {
+		Group json.RawMessage `json:"group"`
+	}
+	if !decode(w, r, &v) {
+		return
+	}
+	var group *string
+	if len(v.Group) == 0 || json.Unmarshal(v.Group, &group) != nil || (group != nil && len(*group) > 80) {
+		problem(w, 400, "group must be null (all groups) or a string of at most 80 bytes")
+		return
+	}
+	if dbError(w, s.Store.UpdateChannelGroup(r.Context(), r.PathValue("id"), group)) {
+		return
+	}
+	respond(w, 204, nil)
 }
 func (s *Server) deleteChannel(w http.ResponseWriter, r *http.Request) {
 	if dbError(w, s.Store.DeleteChannel(r.Context(), r.PathValue("id"))) {

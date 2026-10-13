@@ -44,7 +44,12 @@ export type Settings = {
   description: string;
   retention_days: number;
 };
-export type Channel = { id: string; name: string; kind: string };
+export type Channel = {
+  id: string;
+  name: string;
+  kind: string;
+  group: string | null;
+};
 export type APIKey = {
   id: string;
   name: string;

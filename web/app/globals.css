@@ -921,6 +921,21 @@ td small {
   display: block;
   margin-top: 3px;
 }
+.channel-list > div {
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.channel-list > div > div {
+  flex: 1;
+  min-width: 120px;
+  overflow-wrap: anywhere;
+}
+.channel-list label {
+  flex: 1;
+  min-width: 140px;
+  max-width: 320px;
+  overflow-wrap: anywhere;
+}
 .token {
   border: 1px solid var(--accent);
   padding: 15px;
