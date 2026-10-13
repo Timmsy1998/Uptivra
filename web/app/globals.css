@@ -540,6 +540,7 @@ form {
   background: var(--panel);
 }
 .table-scroll {
+  position: relative;
   overflow-x: auto;
 }
 table {

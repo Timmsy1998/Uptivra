@@ -36,7 +36,7 @@ export default function Channels() {
           <h2>Add a destination</h2>
           <p>
             Every channel receives incident openings and recoveries. Failed
-            deliveries retry up to eight times with exponential backoff.
+            deliveries make up to eight attempts with exponential backoff.
           </p>
           <p>
             Webhook payloads are signed with HMAC-SHA256. Discord messages
