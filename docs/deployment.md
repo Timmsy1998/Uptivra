@@ -14,7 +14,7 @@ Choose one scheduler: Vercel cron, `uptivra schedule`, or an external minute job
 | `NEXT_PUBLIC_DEMO_MODE` | Next.js build | Set exactly `true` for the temporary browser demo; unset for normal authenticated operation. Rebuild when changing |
 | `API_ORIGIN` | Next.js server | Fixed Go backend origin; never a `NEXT_PUBLIC_` variable |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | Next.js server, optional | Backend Vercel deployment-protection bypass; keep server-side |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Bootstrap command only | Initial account; password 14–72 bytes. Bootstrap refuses to replace an existing account |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Bootstrap or password recovery command only | Password 14–72 bytes. Bootstrap refuses to replace an existing account |
 | `POSTGRES_PASSWORD` | Compose only | Database password; a random hex value avoids URL escaping problems |
 
 The application does not load `.env` itself. Compose reads it; native shell sessions must export it. Protect environment files (`chmod 600 .env`) and use your host's secret manager in production. Examples contain no production credentials.
@@ -86,6 +86,20 @@ npm --prefix web ci
 ```
 
 Use three terminals with the same exported environment: `./bin/uptivra serve`, `./bin/uptivra schedule` and `npm --prefix web run dev`. Open `http://localhost:3000`. Bootstrap is a one-time command; subsequent password changes are in the authenticated settings screen. There is no unauthenticated password-reset endpoint.
+
+If locked out, use the trusted terminal recovery command. Load the same `DATABASE_URL`, `APP_ORIGIN`, `ENCRYPTION_KEY` and `CRON_SECRET` as the live backend; for Neon, use its direct connection URL to the same branch and database. Rebuild the binary from this version first. The email must match the stored account exactly. This replaces the password and revokes all browser sessions in one transaction; API keys remain valid. Database access is the recovery authority, so keep this command and its credentials in a trusted environment.
+
+```bash
+go build -trimpath -o bin/uptivra ./cmd/uptivra
+read -r -p 'Administrator email: ' ADMIN_EMAIL
+read -r -s -p 'New password (14–72 bytes): ' ADMIN_PASSWORD
+printf '\n'
+export ADMIN_EMAIL ADMIN_PASSWORD
+./bin/uptivra reset-password
+unset ADMIN_EMAIL ADMIN_PASSWORD
+```
+
+Then sign in with the new password. Existing login throttling still applies: after repeated failed attempts, allow the 15-minute window to expire before trying again. Do not save recovery credentials in Vercel environment variables.
 
 For production Next.js, build and serve the standalone artifact:
 

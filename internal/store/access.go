@@ -140,3 +140,34 @@ func (s *Store) ChangePassword(ctx context.Context, old, next string) error {
 	}
 	return tx.Commit(ctx)
 }
+
+// ResetPassword is a trusted CLI recovery operation requiring database access.
+// The account lock also fences session issuance by concurrent logins.
+func (s *Store) ResetPassword(ctx context.Context, email, next string) error {
+	if email == "" || len(email) > 254 || len(next) < 14 || len(next) > 72 {
+		return errors.New("email and a password of 14–72 bytes required")
+	}
+	h, e := bcrypt.GenerateFromPassword([]byte(next), 12)
+	if e != nil {
+		return e
+	}
+	tx, e := s.DB.Begin(ctx)
+	if e != nil {
+		return errors.New("password reset transaction unavailable")
+	}
+	defer tx.Rollback(ctx)
+	updated, e := tx.Exec(ctx, `UPDATE accounts SET password_hash=$1 WHERE id=1 AND email=$2`, string(h), email)
+	if e != nil {
+		return errors.New("password reset failed")
+	}
+	if updated.RowsAffected() != 1 {
+		return errors.New("administrator email not found (match exact stored spelling)")
+	}
+	if _, e = tx.Exec(ctx, `DELETE FROM sessions`); e != nil {
+		return errors.New("password reset session revocation failed")
+	}
+	if e = tx.Commit(ctx); e != nil {
+		return errors.New("password reset commit failed")
+	}
+	return nil
+}

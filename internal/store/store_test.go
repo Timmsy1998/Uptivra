@@ -261,6 +261,14 @@ func TestChecksPreserveScheduleAfterMissedTicks(t *testing.T) {
 // Hold session insertion at a database barrier while a password change competes.
 // Once both finish, a login using the old password must never leave a valid session.
 func TestPasswordChangeFencesInFlightLogin(t *testing.T) {
+	for _, recovery := range []bool{false, true} {
+		t.Run(fmt.Sprintf("recovery=%t", recovery), func(t *testing.T) {
+			testPasswordChangeFencesInFlightLogin(t, recovery)
+		})
+	}
+}
+
+func testPasswordChangeFencesInFlightLogin(t *testing.T, recovery bool) {
 	s := testutil.DB(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -306,7 +314,13 @@ func TestPasswordChangeFencesInFlightLogin(t *testing.T) {
 		}
 	}
 	changed := make(chan error, 1)
-	go func() { changed <- s.ChangePassword(ctx, password, "replacement-password-for-race") }()
+	go func() {
+		if recovery {
+			changed <- s.ResetPassword(ctx, "race@example.com", "replacement-password-for-race")
+		} else {
+			changed <- s.ChangePassword(ctx, password, "replacement-password-for-race")
+		}
+	}()
 	// Either the update waits on the account lock, or it commits before insertion.
 	// Release the insertion only after observing one of those durable outcomes.
 	completed := false
@@ -352,5 +366,61 @@ func TestPasswordChangeFencesInFlightLogin(t *testing.T) {
 	}
 	if _, err = s.Login(ctx, "race@example.com", password); err == nil {
 		t.Fatal("old password accepted")
+	}
+}
+
+func TestResetPassword(t *testing.T) {
+	s := testutil.DB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	const email = "admin@example.com"
+	const old = "original-admin-password"
+	const next = "replacement-admin-password"
+	if err := s.ResetPassword(ctx, email, next); err == nil {
+		t.Fatal("reset created missing account")
+	}
+	if err := s.Bootstrap(ctx, email, old); err != nil {
+		t.Fatal(err)
+	}
+	token, err := s.Login(ctx, email, old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, input := range []struct{ email, password string }{
+		{"", next}, {strings.Repeat("e", 255), next},
+		{email, "short"}, {email, strings.Repeat("p", 73)},
+		{"Admin@example.com", next},
+	} {
+		if err := s.ResetPassword(ctx, input.email, input.password); err == nil {
+			t.Fatal("invalid recovery accepted")
+		}
+		if !s.Session(ctx, token) {
+			t.Fatal("failed recovery revoked session")
+		}
+	}
+	// A failure during session revocation must roll back the password update.
+	if _, err := s.DB.Exec(ctx, `CREATE FUNCTION reject_revocation() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test revocation failure'; END $$; CREATE TRIGGER reject_revocation BEFORE DELETE ON sessions FOR EACH ROW EXECUTE FUNCTION reject_revocation()`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ResetPassword(ctx, email, next); err == nil {
+		t.Fatal("reset succeeded despite failed revocation")
+	}
+	if _, err := s.Login(ctx, email, old); err != nil {
+		t.Fatal("failed reset changed password", err)
+	}
+	if _, err := s.DB.Exec(ctx, `DROP TRIGGER reject_revocation ON sessions`); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ResetPassword(ctx, email, next); err != nil {
+		t.Fatal(err)
+	}
+	if s.Session(ctx, token) {
+		t.Fatal("reset left old session valid")
+	}
+	if _, err := s.Login(ctx, email, old); err == nil {
+		t.Fatal("reset left old password valid")
+	}
+	if _, err := s.Login(ctx, email, next); err != nil {
+		t.Fatal("new password rejected", err)
 	}
 }

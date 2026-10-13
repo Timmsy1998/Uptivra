@@ -49,6 +49,14 @@ func run() error {
 		return s.Migrate(ctx)
 	case "bootstrap":
 		return s.Bootstrap(ctx, os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD"))
+	case "reset-password":
+		recovery, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		if e := s.ResetPassword(recovery, os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD")); e != nil {
+			return e
+		}
+		slog.Info("administrator password reset; browser sessions revoked")
+		return nil
 	case "tick":
 		report, e := worker.Tick(ctx, s)
 		slog.Info("tick finished", "claimed", report.Claimed, "recorded", report.Recorded, "delivered", report.Delivered)
@@ -96,5 +104,5 @@ func run() error {
 type commandError struct{}
 
 func (*commandError) Error() string {
-	return "command must be serve, migrate, bootstrap, tick or schedule"
+	return "command must be serve, migrate, bootstrap, reset-password, tick or schedule"
 }
