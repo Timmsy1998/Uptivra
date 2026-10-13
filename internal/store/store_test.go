@@ -226,3 +226,33 @@ func TestExpiredClaimsAndTerminalDelivery(t *testing.T) {
 		t.Fatal("terminal delivery reclaimed", err)
 	}
 }
+
+func TestChecksPreserveScheduleAfterMissedTicks(t *testing.T) {
+	s := testutil.DB(t)
+	ctx := context.Background()
+	if err := s.SaveMonitor(ctx, monitor("cadence"), true); err != nil {
+		t.Fatal(err)
+	}
+	var due time.Time
+	if err := s.DB.QueryRow(ctx, `UPDATE monitors SET next_check=now()-interval '125 seconds' WHERE id='cadence' RETURNING next_check`).Scan(&due); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := s.Claim(ctx)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim: %v %v", claimed, err)
+	}
+	if err := s.Record(ctx, claimed[0], domain.Check{At: time.Now(), OK: true, Code: 200}); err != nil {
+		t.Fatal(err)
+	}
+	var next time.Time
+	if err := s.DB.QueryRow(ctx, `SELECT next_check FROM monitors WHERE id='cadence'`).Scan(&next); err != nil {
+		t.Fatal(err)
+	}
+	if !next.Equal(due.Add(180 * time.Second)) {
+		t.Fatalf("schedule drift: due %v next %v", due, next)
+	}
+	again, err := s.Claim(ctx)
+	if err != nil || len(again) != 0 {
+		t.Fatalf("replayed missed slots: %v %v", again, err)
+	}
+}

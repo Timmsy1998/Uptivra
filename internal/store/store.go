@@ -262,7 +262,8 @@ func (s *Store) Record(ctx context.Context, m domain.Monitor, c domain.Check) er
 	if e != nil {
 		return e
 	}
-	_, e = tx.Exec(ctx, `UPDATE monitors SET status=$3,failures=$4,successes=$5,last_check=$6,next_check=now()+interval_seconds*interval '1 second',lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2`, m.ID, m.Lease, status, f, r, c.At)
+	// Advance the original schedule past now; completion-relative intervals drift across cron ticks.
+	_, e = tx.Exec(ctx, `UPDATE monitors SET status=$3,failures=$4,successes=$5,last_check=$6,next_check=next_check+(floor(extract(epoch FROM (now()-next_check))/interval_seconds)+1)*interval_seconds*interval '1 second',lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2`, m.ID, m.Lease, status, f, r, c.At)
 	if e != nil {
 		return e
 	}
