@@ -1,0 +1,165 @@
+package store_test
+
+import (
+	"context"
+	"github.com/timmsy1998/uptivra/internal/domain"
+	"github.com/timmsy1998/uptivra/internal/store"
+	"github.com/timmsy1998/uptivra/internal/testutil"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+func monitor(id string) domain.Monitor {
+	return domain.Monitor{ID: id, Name: "API", URL: "https://example.com", Interval: 60, Timeout: 5, ExpectedStatus: 200, FailureThreshold: 2, RecoveryThreshold: 2, Enabled: true, Authorized: true, Headers: map[string]string{"Authorization": "secret-value"}}
+}
+func TestClaimsIncidentsAndSecrets(t *testing.T) {
+	s := testutil.DB(t)
+	ctx := context.Background()
+	m := monitor("one")
+	if e := s.SaveMonitor(ctx, m, true); e != nil {
+		t.Fatal(e)
+	}
+	var config, sec string
+	if e := s.DB.QueryRow(ctx, `SELECT config::text,secrets FROM monitors`).Scan(&config, &sec); e != nil {
+		t.Fatal(e)
+	}
+	if strings.Contains(config+sec, "secret-value") {
+		t.Fatal("plaintext header persisted")
+	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	claimed := []domain.Monitor{}
+	for range 8 {
+		wg.Go(func() {
+			ms, e := s.Claim(ctx)
+			if e != nil {
+				t.Error(e)
+			}
+			mu.Lock()
+			claimed = append(claimed, ms...)
+			mu.Unlock()
+		})
+	}
+	wg.Wait()
+	if len(claimed) != 1 {
+		t.Fatalf("claimed %d times", len(claimed))
+	}
+	first := claimed[0]
+	c := domain.Check{At: time.Now(), Reason: "status_mismatch", Code: 500}
+	if e := s.Record(ctx, first, c); e != nil {
+		t.Fatal(e)
+	}
+	if e := s.Record(ctx, first, c); e != nil {
+		t.Fatal(e)
+	}
+	h, _ := s.History(ctx, m.ID)
+	if len(h) != 1 {
+		t.Fatal("duplicate result")
+	}
+	if e := s.CreateChannel(ctx, store.Channel{Name: "Ops", Kind: "webhook", URL: "https://example.com/hook", SigningSecret: strings.Repeat("s", 32)}); e != nil {
+		t.Fatal(e)
+	}
+	run := func(ok bool) {
+		t.Helper()
+		s.DB.Exec(ctx, `UPDATE monitors SET next_check=now()`)
+		ms, e := s.Claim(ctx)
+		if e != nil || len(ms) != 1 {
+			t.Fatalf("claim: %v %d", e, len(ms))
+		}
+		if e = s.Record(ctx, ms[0], domain.Check{At: time.Now(), OK: ok, Code: 200}); e != nil {
+			t.Fatal(e)
+		}
+	}
+	run(false)
+	run(false)
+	inc, _ := s.Incidents(ctx, false)
+	if len(inc) != 1 || inc[0].ResolvedAt != nil {
+		t.Fatal("incident not uniquely opened")
+	}
+	run(true)
+	inc, _ = s.Incidents(ctx, false)
+	if inc[0].ResolvedAt != nil {
+		t.Fatal("recovered below threshold")
+	}
+	run(true)
+	inc, _ = s.Incidents(ctx, false)
+	if inc[0].ResolvedAt == nil {
+		t.Fatal("not resolved")
+	}
+	ds, e := s.ClaimDeliveries(ctx)
+	if e != nil || len(ds) != 2 {
+		t.Fatalf("outbox %d %v", len(ds), e)
+	}
+	again, _ := s.ClaimDeliveries(ctx)
+	if len(again) != 0 {
+		t.Fatal("duplicate delivery claims")
+	}
+	if e = s.FinishDelivery(ctx, ds[0], false); e != nil {
+		t.Fatal(e)
+	}
+	var attempts int
+	var delivered *time.Time
+	s.DB.QueryRow(ctx, `SELECT attempts,delivered_at FROM deliveries WHERE id=$1`, ds[0].ID).Scan(&attempts, &delivered)
+	if attempts != 1 || delivered != nil {
+		t.Fatal("retry state")
+	}
+	// Editing invalidates an in-flight claim, and secrets round-trip through encryption.
+	s.DB.Exec(ctx, `UPDATE monitors SET next_check=now()`)
+	ms, _ := s.Claim(ctx)
+	m.Name = "Renamed"
+	if e = s.SaveMonitor(ctx, m, false); e != nil {
+		t.Fatal(e)
+	}
+	if e = s.Record(ctx, ms[0], domain.Check{At: time.Now(), OK: false}); e != nil {
+		t.Fatal(e)
+	}
+	got, _ := s.Monitor(ctx, m.ID)
+	if got.Headers["Authorization"] != "secret-value" || got.Failures != 0 {
+		t.Fatal("stale claim or secret corruption")
+	}
+	if e = s.DeleteMonitor(ctx, m.ID); e != nil {
+		t.Fatal(e)
+	}
+	h, _ = s.History(ctx, m.ID)
+	if len(h) != 0 {
+		t.Fatal("history not cascaded")
+	}
+}
+func TestAuth(t *testing.T) {
+	s := testutil.DB(t)
+	ctx := context.Background()
+	password := "test-password-long-enough"
+	if e := s.Bootstrap(ctx, "admin@example.com", password); e != nil {
+		t.Fatal(e)
+	}
+	if e := s.Bootstrap(ctx, "other@example.com", password); e == nil {
+		t.Fatal("second administrator")
+	}
+	if _, e := s.Login(ctx, "admin@example.com", "incorrect"); e == nil {
+		t.Fatal("bad login")
+	}
+	token, e := s.Login(ctx, "admin@example.com", password)
+	if e != nil || !s.Session(ctx, token) {
+		t.Fatal("session", e)
+	}
+	key, e := s.CreateKey(ctx, "CI", "read")
+	if e != nil || s.KeyScope(ctx, key) != "read" {
+		t.Fatal("key", e)
+	}
+	if e = s.ChangePassword(ctx, password, "another-long-password"); e != nil {
+		t.Fatal(e)
+	}
+	if s.Session(ctx, token) {
+		t.Fatal("sessions survived password change")
+	}
+	for range 3 {
+		if !s.RateLimit(ctx, "login", 3) {
+			t.Fatal("early throttle")
+		}
+	}
+	if s.RateLimit(ctx, "login", 3) {
+		t.Fatal("missing throttle")
+	}
+}
