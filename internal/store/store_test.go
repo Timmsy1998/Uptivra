@@ -164,3 +164,65 @@ func TestAuth(t *testing.T) {
 		t.Fatal("missing throttle")
 	}
 }
+
+func TestExpiredClaimsAndTerminalDelivery(t *testing.T) {
+	s := testutil.DB(t)
+	ctx := context.Background()
+	m := monitor("lease")
+	m.FailureThreshold = 1
+	if err := s.SaveMonitor(ctx, m, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateChannel(ctx, store.Channel{Name: "Ops", Kind: "webhook", URL: "https://example.com/hook", SigningSecret: strings.Repeat("s", 32)}); err != nil {
+		t.Fatal(err)
+	}
+	old, err := s.Claim(ctx)
+	if err != nil || len(old) != 1 {
+		t.Fatalf("claim: %v %v", old, err)
+	}
+	if _, err = s.DB.Exec(ctx, `UPDATE monitors SET lease_until=now()-interval '1 second'`); err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := s.Claim(ctx)
+	if err != nil || len(fresh) != 1 || fresh[0].Lease == old[0].Lease {
+		t.Fatalf("reclaim: %v %v", fresh, err)
+	}
+	if err = s.Record(ctx, old[0], domain.Check{At: time.Now(), OK: true}); err != nil {
+		t.Fatal(err)
+	}
+	history, err := s.History(ctx, m.ID)
+	if err != nil || len(history) != 0 {
+		t.Fatal("expired worker persisted a result", err)
+	}
+	if err = s.Record(ctx, fresh[0], domain.Check{At: time.Now(), OK: false}); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 1; attempt <= 8; attempt++ {
+		deliveries, err := s.ClaimDeliveries(ctx)
+		if err != nil || len(deliveries) != 1 {
+			t.Fatalf("attempt %d: %v %v", attempt, deliveries, err)
+		}
+		if err = s.FinishDelivery(ctx, deliveries[0], false); err != nil {
+			t.Fatal(err)
+		}
+		// A duplicate completion must not increment attempts or alter the retry deadline.
+		if err = s.FinishDelivery(ctx, deliveries[0], true); err != nil {
+			t.Fatal(err)
+		}
+		var attempts int
+		var failed, delivered *time.Time
+		if err = s.DB.QueryRow(ctx, `SELECT attempts,failed_at,delivered_at FROM deliveries`).Scan(&attempts, &failed, &delivered); err != nil {
+			t.Fatal(err)
+		}
+		if attempts != attempt || delivered != nil || (failed != nil) != (attempt == 8) {
+			t.Fatalf("attempt %d: attempts=%d failed=%v delivered=%v", attempt, attempts, failed, delivered)
+		}
+		if _, err = s.DB.Exec(ctx, `UPDATE deliveries SET next_attempt=now()`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deliveries, err := s.ClaimDeliveries(ctx)
+	if err != nil || len(deliveries) != 0 {
+		t.Fatal("terminal delivery reclaimed", err)
+	}
+}

@@ -2,8 +2,10 @@ package netguard
 
 import (
 	"context"
+	"net/http"
 	"net/netip"
 	"testing"
+	"time"
 )
 
 func TestAddresses(t *testing.T) {
@@ -38,5 +40,23 @@ func TestMixedDNS(t *testing.T) {
 	}
 	if e == nil {
 		t.Fatal("mixed DNS answers allowed")
+	}
+}
+
+func TestRedirectBoundaries(t *testing.T) {
+	client := Client(time.Second)
+	original, _ := http.NewRequest("GET", "https://example.com/start", nil)
+	for _, target := range []string{"http://example.com/end", "https://other.example/end", "https://127.0.0.1/end", "https://example.com:443/end"} {
+		next, _ := http.NewRequest("GET", target, nil)
+		if err := client.CheckRedirect(next, []*http.Request{original}); err == nil {
+			t.Errorf("redirect accepted: %s", target)
+		}
+	}
+	next, _ := http.NewRequest("GET", "https://example.com/end", nil)
+	if err := client.CheckRedirect(next, []*http.Request{original}); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.CheckRedirect(next, []*http.Request{original, original, original, original, original}); err == nil {
+		t.Fatal("redirect loop accepted")
 	}
 }
