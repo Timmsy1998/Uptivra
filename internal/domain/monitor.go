@@ -10,6 +10,8 @@ import (
 )
 
 type Monitor struct {
+	Type              string            `json:"type,omitempty"`
+	Grace             int               `json:"grace_seconds,omitempty"`
 	ID                string            `json:"id"`
 	Name              string            `json:"name"`
 	Description       string            `json:"description"`
@@ -41,13 +43,20 @@ func (m Monitor) Validate() error {
 	if strings.TrimSpace(m.Name) == "" || len(m.Name) > 100 || len(m.Description) > 500 || len(m.Group) > 80 {
 		return errors.New("name (1–100), description (up to 500) and group (up to 80 characters) required")
 	}
-	if _, e := netguard.URL(m.URL); e != nil {
+	if m.Type != "" && m.Type != "http" && m.Type != "heartbeat" {
+		return errors.New("monitor type must be http or heartbeat")
+	}
+	if m.Type == "heartbeat" {
+		if m.Grace < 0 || m.Grace > 86400 || m.URL != "" || len(m.Headers) != 0 || m.Contains != "" {
+			return errors.New("heartbeat requires grace 0–86400 seconds and no HTTP target, headers or content")
+		}
+	} else if _, e := netguard.URL(m.URL); e != nil {
 		return e
 	}
 	if !m.Authorized {
 		return errors.New("confirm you are authorized to monitor this endpoint")
 	}
-	if m.Interval < 60 || m.Interval > 86400 || m.Timeout < 1 || m.Timeout > 10 || m.ExpectedStatus < 100 || m.ExpectedStatus > 599 || m.FailureThreshold < 1 || m.FailureThreshold > 10 || m.RecoveryThreshold < 1 || m.RecoveryThreshold > 10 || len(m.Contains) > 1024 {
+	if m.Interval < 60 || m.Interval > 86400 || (m.Type != "heartbeat" && (m.Timeout < 1 || m.Timeout > 10 || m.ExpectedStatus < 100 || m.ExpectedStatus > 599)) || m.FailureThreshold < 1 || m.FailureThreshold > 10 || m.RecoveryThreshold < 1 || m.RecoveryThreshold > 10 || len(m.Contains) > 1024 {
 		return errors.New("invalid interval, timeout, status, content or thresholds")
 	}
 	if len(m.Headers) > 16 {
@@ -72,6 +81,12 @@ func (m Monitor) Validate() error {
 	}
 	return nil
 }
+
+// HeartbeatFresh uses the database clock supplied by the recording transaction.
+func (m Monitor) HeartbeatFresh(last *time.Time, now time.Time) bool {
+	return last != nil && !last.After(now) && now.Sub(*last) <= time.Duration(m.Interval+m.Grace)*time.Second
+}
+
 func (m Monitor) Health(now time.Time) string {
 	if !m.Enabled {
 		return "paused"

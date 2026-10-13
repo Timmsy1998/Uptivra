@@ -2181,6 +2181,90 @@
           }
         ]
       }
+    },
+    "/api/v1/monitors/{id}/heartbeat-token": {
+      "post": {
+        "summary": "Generate or replace a heartbeat token",
+        "operationId": "rotateHeartbeatToken",
+        "description": "Session only, with same-origin validation. Invalidates the previous token; plaintext returned once. Heartbeat monitors only.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "One-time token and relative receipt path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "token": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required"
+          },
+          "403": {
+            "description": "Invalid origin or API key"
+          },
+          "404": {
+            "description": "Heartbeat monitor not found"
+          }
+        }
+      }
+    },
+    "/api/v1/heartbeats/{id}": {
+      "post": {
+        "summary": "Receive a heartbeat",
+        "operationId": "receiveHeartbeat",
+        "description": "Outbound bot signal; no request body. Requires this monitor\u2019s token, not an administrator session. Disabled monitors reject receipts. Receipt is evaluated by the scheduler and does not create a check immediately.",
+        "security": [
+          {
+            "heartbeat": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Heartbeat received"
+          },
+          "401": {
+            "description": "Missing, invalid or disabled token"
+          },
+          "503": {
+            "description": "Database unavailable"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2200,6 +2284,11 @@
         "type": "http",
         "scheme": "bearer",
         "description": "CRON_SECRET only; call backend directly, not the 15-second Next.js proxy."
+      },
+      "heartbeat": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Per-monitor heartbeat token. Only its hash is stored."
       }
     },
     "schemas": {
@@ -2221,9 +2310,7 @@
           },
           "url": {
             "type": "string",
-            "format": "uri",
-            "maxLength": 2048,
-            "description": "Public HTTP(S), port 80 or 443; DNS and redirects checked on connection."
+            "maxLength": 2048
           },
           "interval_seconds": {
             "type": "integer",
@@ -2231,14 +2318,10 @@
             "maximum": 86400
           },
           "timeout_seconds": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 10
+            "type": "integer"
           },
           "expected_status": {
-            "type": "integer",
-            "minimum": 100,
-            "maximum": 599
+            "type": "integer"
           },
           "contains": {
             "type": "string",
@@ -2330,20 +2413,84 @@
             "type": "integer",
             "minimum": 0,
             "readOnly": true
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "http",
+              "heartbeat"
+            ],
+            "default": "http",
+            "description": "Immutable. Omitted means HTTP for legacy monitors."
+          },
+          "grace_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400,
+            "description": "Heartbeat lateness allowance, added to interval_seconds."
           }
         },
         "required": [
           "name",
-          "url",
           "interval_seconds",
-          "timeout_seconds",
-          "expected_status",
           "failure_threshold",
           "recovery_threshold",
           "authorized"
         ],
         "additionalProperties": false,
-        "description": "PUT replaces all writable fields; omitted booleans are false and omitted headers clear existing secrets. Length limits on server are UTF-8 bytes."
+        "description": "PUT replaces all writable fields; omitted booleans are false and omitted headers clear existing secrets. Length limits on server are UTF-8 bytes. Heartbeats use an empty URL, no headers/content, and timeout/status zero. HTTP fields are unused for heartbeats.",
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "const": "heartbeat"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "url": {
+                  "const": ""
+                },
+                "headers": {
+                  "maxProperties": 0
+                },
+                "contains": {
+                  "const": ""
+                }
+              }
+            },
+            "else": {
+              "required": [
+                "url",
+                "timeout_seconds",
+                "expected_status"
+              ],
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048,
+                  "description": "Public HTTP(S), port 80 or 443; DNS and redirects checked on connection."
+                },
+                "timeout_seconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10
+                },
+                "expected_status": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 599
+                }
+              }
+            }
+          }
+        ]
       },
       "Monitor": {
         "type": "object",
@@ -2363,9 +2510,7 @@
           },
           "url": {
             "type": "string",
-            "format": "uri",
-            "maxLength": 2048,
-            "description": "Public HTTP(S), port 80 or 443; DNS and redirects checked on connection."
+            "maxLength": 2048
           },
           "interval_seconds": {
             "type": "integer",
@@ -2373,14 +2518,10 @@
             "maximum": 86400
           },
           "timeout_seconds": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 10
+            "type": "integer"
           },
           "expected_status": {
-            "type": "integer",
-            "minimum": 100,
-            "maximum": 599
+            "type": "integer"
           },
           "contains": {
             "type": "string",
@@ -2465,6 +2606,21 @@
           "samples": {
             "type": "integer",
             "minimum": 0
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "http",
+              "heartbeat"
+            ],
+            "default": "http",
+            "description": "Immutable. Omitted means HTTP for legacy monitors."
+          },
+          "grace_seconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 86400,
+            "description": "Heartbeat lateness allowance, added to interval_seconds."
           }
         },
         "required": [
@@ -2489,6 +2645,58 @@
           "latency_ms",
           "p95_ms",
           "samples"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "type"
+              ],
+              "properties": {
+                "type": {
+                  "const": "heartbeat"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "url": {
+                  "const": ""
+                },
+                "headers": {
+                  "maxProperties": 0
+                },
+                "contains": {
+                  "const": ""
+                }
+              }
+            },
+            "else": {
+              "required": [
+                "url",
+                "timeout_seconds",
+                "expected_status"
+              ],
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048,
+                  "description": "Public HTTP(S), port 80 or 443; DNS and redirects checked on connection."
+                },
+                "timeout_seconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 10
+                },
+                "expected_status": {
+                  "type": "integer",
+                  "minimum": 100,
+                  "maximum": 599
+                }
+              }
+            }
+          }
         ]
       },
       "Check": {

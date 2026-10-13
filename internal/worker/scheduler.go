@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"uptivra/internal/domain"
 	"uptivra/internal/netguard"
 	"uptivra/internal/store"
 )
@@ -51,7 +52,10 @@ func Tick(ctx context.Context, s *store.Store) (Report, error) {
 		if checkCtx.Err() != nil {
 			return
 		}
-		c := Check(checkCtx, ms[i])
+		c := domain.Check{At: time.Now()}
+		if ms[i].Type != "heartbeat" {
+			c = Check(checkCtx, ms[i])
+		}
 		if checkCtx.Err() != nil {
 			return
 		}

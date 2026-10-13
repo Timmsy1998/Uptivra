@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -48,6 +49,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/v1/monitors/{id}", s.auth(false, s.saveMonitor))
 	mux.Handle("DELETE /api/v1/monitors/{id}", s.auth(false, s.deleteMonitor))
 	mux.Handle("GET /api/v1/monitors/{id}/checks", s.auth(false, s.history))
+	mux.Handle("POST /api/v1/monitors/{id}/heartbeat-token", s.auth(true, s.heartbeatToken))
+	mux.HandleFunc("POST /api/v1/heartbeats/{id}", s.heartbeat)
 	mux.Handle("GET /api/v1/incidents", s.auth(false, s.incidents))
 	mux.Handle("GET /api/v1/settings", s.auth(false, s.settings))
 	mux.Handle("PUT /api/v1/settings", s.auth(false, s.saveSettings))
@@ -350,6 +353,32 @@ func (s *Server) createKey(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) deleteKey(w http.ResponseWriter, r *http.Request) {
 	if dbError(w, s.Store.DeleteKey(r.Context(), r.PathValue("id"))) {
+		return
+	}
+	respond(w, 204, nil)
+}
+
+func (s *Server) heartbeatToken(w http.ResponseWriter, r *http.Request) {
+	token, err := s.Store.RotateHeartbeatToken(r.Context(), r.PathValue("id"))
+	if dbError(w, err) {
+		return
+	}
+	respond(w, 201, map[string]string{"token": token, "path": "/api/v1/heartbeats/" + r.PathValue("id")})
+}
+func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		problem(w, 401, "heartbeat authentication required")
+		return
+	}
+	err := s.Store.ReceiveHeartbeat(ctx, r.PathValue("id"), strings.TrimPrefix(auth, "Bearer "))
+	if errors.Is(err, store.ErrHeartbeatToken) {
+		problem(w, 401, "heartbeat authentication required")
+		return
+	}
+	if dbError(w, err) {
 		return
 	}
 	respond(w, 204, nil)

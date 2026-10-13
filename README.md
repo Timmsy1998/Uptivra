@@ -116,3 +116,5 @@ Database tests skip if `TEST_DATABASE_URL` is missing. They create isolated sche
 [Contributions](CONTRIBUTING.md) are welcome. Please follow the [code of conduct](CODE_OF_CONDUCT.md) and report vulnerabilities privately through [SECURITY.md](SECURITY.md).
 
 Licensed under [Apache-2.0](LICENSE). Maintained by [timmsy1998](https://github.com/timmsy1998).
+
+Monitor services without a public endpoint using [outbound heartbeats](docs/heartbeats.md), including Discord bots.

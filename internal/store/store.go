@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"uptivra/internal/cryptobox"
@@ -17,6 +18,9 @@ import (
 
 //go:embed schema.sql
 var schema string
+
+//go:embed migrations/002_heartbeats.sql
+var heartbeatMigration string
 
 type Store struct {
 	DB  *pgxpool.Pool
@@ -54,6 +58,15 @@ func (s *Store) Migrate(ctx context.Context) error {
 	}
 	if _, e = tx.Exec(ctx, schema); e != nil {
 		return e
+	}
+	var applied bool
+	if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_versions WHERE version=2)`).Scan(&applied); e != nil {
+		return e
+	}
+	if !applied {
+		if _, e = tx.Exec(ctx, heartbeatMigration); e != nil {
+			return e
+		}
 	}
 	return tx.Commit(ctx)
 }
@@ -103,6 +116,10 @@ func (s *Store) scan(row scanner) (domain.Monitor, error) {
 	m.Uptime = uptime
 	m.Latency = latency
 	m.P95 = p95
+	if m.Type == "heartbeat" {
+		m.Latency = nil
+		m.P95 = nil
+	}
 	m.Samples = samples
 	return m, nil
 }
@@ -146,15 +163,32 @@ func (s *Store) SaveMonitor(ctx context.Context, m domain.Monitor, create bool) 
 		return e
 	}
 	secret := s.Box.Seal(string(headers))
-	if create {
-		_, e = s.DB.Exec(ctx, `INSERT INTO monitors(id,config,secrets,enabled,public,interval_seconds,maintenance_until) VALUES($1,$2,$3,$4,$5,$6,$7)`, m.ID, config, secret, m.Enabled, m.Public, m.Interval, m.MaintenanceUntil)
+	tx, e := s.DB.Begin(ctx)
+	if e != nil {
 		return e
 	}
-	tag, e := s.DB.Exec(ctx, `UPDATE monitors SET config=$2,secrets=$3,enabled=$4,public=$5,interval_seconds=$6,maintenance_until=$7,lease_token=NULL,lease_until=NULL,next_check=now(),failures=0,successes=0 WHERE id=$1`, m.ID, config, secret, m.Enabled, m.Public, m.Interval, m.MaintenanceUntil)
-	if e == nil && tag.RowsAffected() == 0 {
-		return pgx.ErrNoRows
+	defer tx.Rollback(ctx)
+	if create {
+		_, e = tx.Exec(ctx, `INSERT INTO monitors(id,config,secrets,enabled,public,interval_seconds,maintenance_until) VALUES($1,$2,$3,$4,$5,$6,$7)`, m.ID, config, secret, m.Enabled, m.Public, m.Interval, m.MaintenanceUntil)
+	} else {
+		var tag pgconn.CommandTag
+		tag, e = tx.Exec(ctx, `UPDATE monitors SET config=$2,secrets=$3,enabled=$4,public=$5,interval_seconds=$6,maintenance_until=$7,lease_token=NULL,lease_until=NULL,next_check=now(),failures=0,successes=0 WHERE id=$1 AND COALESCE(NULLIF(config->>'type',''),'http')=COALESCE(NULLIF($2::jsonb->>'type',''),'http')`, m.ID, config, secret, m.Enabled, m.Public, m.Interval, m.MaintenanceUntil)
+		if e == nil && tag.RowsAffected() == 0 {
+			return pgx.ErrNoRows
+		}
 	}
-	return e
+	if e != nil {
+		return e
+	}
+	if m.Type == "heartbeat" {
+		if _, e = tx.Exec(ctx, `INSERT INTO heartbeats(monitor_id) VALUES($1) ON CONFLICT(monitor_id) DO NOTHING`, m.ID); e != nil {
+			return e
+		}
+		if _, e = tx.Exec(ctx, `UPDATE monitors SET next_check=GREATEST(now(),COALESCE(maintenance_until,now()))+($2::integer+$3::integer)*interval '1 second' WHERE id=$1`, m.ID, m.Interval, m.Grace); e != nil {
+			return e
+		}
+	}
+	return tx.Commit(ctx)
 }
 func (s *Store) DeleteMonitor(ctx context.Context, id string) error {
 	t, e := s.DB.Exec(ctx, "DELETE FROM monitors WHERE id=$1", id)
@@ -256,6 +290,20 @@ func (s *Store) Record(ctx context.Context, m domain.Monitor, c domain.Check) er
 	}
 	if e != nil {
 		return e
+	}
+	if m.Type == "heartbeat" {
+		// Receipt takes the same monitor-row lock, so freshness is evaluated
+		// inside the fenced recording transaction, never from a stale claim.
+		var last *time.Time
+		if e = tx.QueryRow(ctx, `SELECT last_received,clock_timestamp() FROM heartbeats WHERE monitor_id=$1`, m.ID).Scan(&last, &c.At); e != nil {
+			return e
+		}
+		c.OK = m.HeartbeatFresh(last, c.At)
+		c.Latency, c.Code = 0, 0
+		c.Reason = "heartbeat_missed"
+		if c.OK {
+			c.Reason = "heartbeat_received"
+		}
 	}
 	status, f, r, event := domain.Transition(status, f, r, c.OK, m.FailureThreshold, m.RecoveryThreshold)
 	_, e = tx.Exec(ctx, `INSERT INTO checks(monitor_id,checked_at,ok,latency_ms,status_code,reason) VALUES($1,$2,$3,$4,$5,$6)`, m.ID, c.At, c.OK, c.Latency, c.Code, c.Reason)

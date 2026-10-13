@@ -20,7 +20,7 @@ Each tick claims the oldest 32 due, enabled monitors with `FOR UPDATE SKIP LOCKE
 
 A result transaction inserts history, updates counters, opens/resolves an incident and writes notification events atomically. Duplicate completion is ignored after the lease is cleared; `(monitor_id, checked_at)` also has a uniqueness constraint. An incident has at most one open row per monitor. A killed process leaves reclaimable work; no in-memory coordination is required.
 
-The next due time advances along the monitor's existing schedule to the first slot after transaction start. Missed slots are skipped rather than replayed in a burst. Minute cron rounds actual execution to available ticks; configured intervals are scheduling targets, not real-time guarantees. A monitor edited or resumed becomes due immediately. Maintenance prevents claims until its deadline; it does not invent successful checks or resolve existing incidents.
+The next due time advances along the monitor's existing schedule to the first slot after transaction start. Missed slots are skipped rather than replayed in a burst. Minute cron rounds actual execution to available ticks; configured intervals are scheduling targets, not real-time guarantees. An HTTP monitor edited or resumed becomes due immediately; a heartbeat monitor receives an initial interval + grace window. Maintenance prevents claims until its deadline; it does not invent successful checks or resolve existing incidents.
 
 After checks, the tick claims up to 16 outbox entries and delivers with eight workers and a five-second request timeout. The whole tick has a 55-second deadline under the configured 60-second Go Function limit. There are no goroutines continuing after the handler returns. Delivery is at least once; a crash after remote acceptance but before the database commit can duplicate an event. Receivers must deduplicate persistently.
 
@@ -49,3 +49,7 @@ The initial schema is an embedded SQL migration guarded by a PostgreSQL advisory
 Vercel runs the Go Function and Next.js frontend as separate projects. The root `vercel.json` routes API requests to one adapter and calls `/api/cron` every minute. Frontend cookies remain on the frontend origin; only selected headers pass through a fixed `API_ORIGIN` proxy. Long scheduler requests must call the backend directly because the frontend proxy has a 15-second timeout.
 
 Native/container deployments use `serve` and `schedule`, or an external minute scheduler invoking `tick`. Run one chosen scheduling mechanism per installation. The same durable claims handle accidental overlap. PostgreSQL is the only persistent dependency. Local filesystem state is unnecessary for application correctness.
+
+## Heartbeats
+
+Migration 2 adds per-monitor hashed tokens and the last receipt timestamp. Receipt and recording lock the monitor row in the same order. Scheduled freshness evaluations use the database timestamp and enter the same fenced result/incident/outbox transaction as HTTP checks. Type is immutable; legacy monitors with no type remain HTTP. Receipts create no history; the scheduler records bounded observations. Heartbeat latency aggregates are null. See [setup and threat boundaries](heartbeats.md).
