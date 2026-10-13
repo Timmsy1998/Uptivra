@@ -75,13 +75,13 @@ export default function MonitorDetail({
             >
               {chronological.map((c) => (
                 <div
-                  key={c.at}
+                  key={c.checked_at}
                   className={c.ok ? "ok" : "fail"}
                   style={{
                     height: Math.max(2, (c.latency_ms / max) * 100) + "%",
                   }}
                   title={
-                    date(c.at) +
+                    date(c.checked_at) +
                     " · " +
                     ms(c.latency_ms) +
                     (c.ok ? " · healthy" : " · " + c.reason)
@@ -90,8 +90,8 @@ export default function MonitorDetail({
               ))}
             </div>
             <div className="chart-axis">
-              <span>{date(chronological[0].at)}</span>
-              <span>{date(checks[0].at)}</span>
+              <span>{date(chronological[0].checked_at)}</span>
+              <span>{date(checks[0].checked_at)}</span>
             </div>
           </>
         ) : (
@@ -128,8 +128,8 @@ export default function MonitorDetail({
             </thead>
             <tbody>
               {checks.map((c) => (
-                <tr key={c.at}>
-                  <td className="mono">{date(c.at)}</td>
+                <tr key={c.checked_at}>
+                  <td className="mono">{date(c.checked_at)}</td>
                   <td>
                     <Status value={c.ok ? "healthy" : "down"} />
                   </td>

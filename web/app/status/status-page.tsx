@@ -44,6 +44,7 @@ export default function StatusPage() {
       clearInterval(timer);
     };
   }, []);
+  const currentStatus = error ? "unknown" : data?.status || "unknown";
   const groups = [
     ...new Set(data?.monitors.map((m) => m.group || "Services") || []),
   ];
@@ -68,13 +69,14 @@ export default function StatusPage() {
         <ErrorMessage message={error} />
         {data && (
           <>
-            <section className={"overall-status " + data.status}>
+            <section className={"overall-status " + currentStatus}>
               <span className="status-dot" />
               <div>
-                <h2>{summary[data.status] || summary.unknown}</h2>
+                <h2>{summary[currentStatus] || summary.unknown}</h2>
                 <p>
                   {error
-                    ? "Showing the last successful update."
+                    ? "Current health unavailable. Last update " +
+                      date(data.updated_at)
                     : "Updated " + date(data.updated_at)}
                 </p>
               </div>
@@ -102,7 +104,7 @@ export default function StatusPage() {
                           </span>
                         </div>
                         <div>
-                          <Status value={m.status} />
+                          <Status value={error ? "unknown" : m.status} />
                           <span className="mono">
                             {percent(m.uptime)} uptime
                           </span>

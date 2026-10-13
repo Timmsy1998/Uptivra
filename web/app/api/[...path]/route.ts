@@ -21,12 +21,30 @@ async function forward(request: NextRequest) {
       process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
     );
   try {
-    const body =
-      request.method === "GET" || request.method === "HEAD"
-        ? undefined
-        : await request.arrayBuffer();
-    if (body && body.byteLength > 32768)
-      return Response.json({ error: "request too large" }, { status: 413 });
+    let body: ArrayBuffer | undefined;
+    if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
+      const reader = request.body.getReader();
+      const buffer = new Uint8Array(32768);
+      let length = 0;
+      try {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          if (length + chunk.value.byteLength > buffer.byteLength) {
+            await reader.cancel();
+            return Response.json(
+              { error: "request too large" },
+              { status: 413 },
+            );
+          }
+          buffer.set(chunk.value, length);
+          length += chunk.value.byteLength;
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      body = buffer.buffer.slice(0, length);
+    }
     const upstream = await fetch(url, {
       method: request.method,
       headers,

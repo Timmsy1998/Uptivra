@@ -23,7 +23,7 @@ export type Monitor = {
   samples: number;
 };
 export type Check = {
-  at: string;
+  checked_at: string;
   ok: boolean;
   latency_ms: number;
   status_code: number;

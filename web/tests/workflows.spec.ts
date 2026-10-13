@@ -84,6 +84,16 @@ test("administrator workflow and redacted public status against real PostgreSQL"
       name: "Response time of recent checks, ordered oldest to newest",
     }),
   ).toBeVisible();
+  const history = await (
+    await page.request.get("/api/v1/monitors/" + monitor.id + "/checks")
+  ).json();
+  expect(history[0].checked_at).toBeTruthy();
+  await expect(
+    page.locator("tbody tr").first().locator("td").first(),
+  ).not.toHaveText("No checks yet");
+  await expect(
+    page.locator("tbody tr").first().locator("td").first(),
+  ).not.toHaveText("Invalid Date");
   await page.getByRole("button", { name: "All monitors" }).click();
   await page.getByRole("button", { name: "Pause Example service" }).click();
   await expect(
@@ -147,6 +157,7 @@ test("administrator workflow and redacted public status against real PostgreSQL"
     viewport: { width: 390, height: 844 },
   });
   const publicPage = await anonymous.newPage();
+  await publicPage.clock.install();
   await publicPage.goto(
     (process.env.E2E_ORIGIN || "http://localhost:3000") + "/status",
   );
@@ -179,6 +190,15 @@ test("administrator workflow and redacted public status against real PostgreSQL"
       path: "../docs/screenshots/status-mobile.png",
       fullPage: true,
     });
+  await publicPage.bringToFront();
+  await publicPage.route("**/api/v1/public/status", (route) => route.abort());
+  await publicPage.clock.fastForward(30001);
+  await expect(
+    publicPage.getByRole("heading", { name: "Awaiting current service data" }),
+  ).toBeVisible();
+  await expect(
+    publicPage.getByText("Current health unavailable.", { exact: false }),
+  ).toBeVisible();
   await anonymous.close();
   await page.getByRole("button", { name: "Monitors", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -212,4 +232,12 @@ test("administrator workflow and redacted public status against real PostgreSQL"
     page.getByRole("heading", { name: "Sign in to Uptivra" }),
   ).toBeVisible();
   expect(faults).toEqual([]);
+});
+
+test("proxy rejects oversized request bodies", async ({ request }) => {
+  const response = await request.post("/api/v1/monitors", {
+    headers: { "Content-Type": "application/json" },
+    data: " ".repeat(32769),
+  });
+  expect(response.status()).toBe(413);
 });
