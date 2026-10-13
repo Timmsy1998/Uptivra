@@ -2,6 +2,7 @@ package store_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -254,5 +255,102 @@ func TestChecksPreserveScheduleAfterMissedTicks(t *testing.T) {
 	again, err := s.Claim(ctx)
 	if err != nil || len(again) != 0 {
 		t.Fatalf("replayed missed slots: %v %v", again, err)
+	}
+}
+
+// Hold session insertion at a database barrier while a password change competes.
+// Once both finish, a login using the old password must never leave a valid session.
+func TestPasswordChangeFencesInFlightLogin(t *testing.T) {
+	s := testutil.DB(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	const password = "original-password-for-race"
+	if err := s.Bootstrap(ctx, "race@example.com", password); err != nil {
+		t.Fatal(err)
+	}
+	barrier := time.Now().UnixNano() % 1000000000
+	gate, err := s.DB.Acquire(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Release()
+	if _, err = gate.Exec(ctx, `SELECT pg_advisory_lock($1)`, barrier); err != nil {
+		t.Fatal(err)
+	}
+	defer gate.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, barrier)
+	_, err = s.DB.Exec(ctx, fmt.Sprintf(`CREATE FUNCTION gate_session() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN PERFORM pg_advisory_xact_lock(%d); RETURN NEW; END $$; CREATE TRIGGER gate_session BEFORE INSERT ON sessions FOR EACH ROW EXECUTE FUNCTION gate_session()`, barrier))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type loginResult struct {
+		token string
+		err   error
+	}
+	login := make(chan loginResult, 1)
+	go func() {
+		token, err := s.Login(ctx, "race@example.com", password)
+		login <- loginResult{token, err}
+	}()
+	for {
+		var waiting bool
+		if err := s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_locks WHERE locktype='advisory' AND NOT granted AND objid=$1::oid)`, barrier).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatal("login did not reach insertion barrier")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	changed := make(chan error, 1)
+	go func() { changed <- s.ChangePassword(ctx, password, "replacement-password-for-race") }()
+	// Either the update waits on the account lock, or it commits before insertion.
+	// Release the insertion only after observing one of those durable outcomes.
+	completed := false
+	for !completed {
+		select {
+		case err = <-changed:
+			if err != nil {
+				t.Fatal(err)
+			}
+			completed = true
+		default:
+			var waiting bool
+			err = s.DB.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE wait_event_type='Lock' AND query LIKE 'UPDATE accounts SET password_hash=%' AND pid IN (SELECT pid FROM pg_locks WHERE relation='accounts'::regclass))`).Scan(&waiting)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if waiting {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				t.Fatal("password change did not reach update")
+			case <-time.After(10 * time.Millisecond):
+			}
+			continue
+		}
+		break
+	}
+	if _, err = gate.Exec(ctx, `SELECT pg_advisory_unlock($1)`, barrier); err != nil {
+		t.Fatal(err)
+	}
+	result := <-login
+	if result.err != nil {
+		t.Fatal(result.err)
+	}
+	if !completed {
+		if err = <-changed; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if s.Session(ctx, result.token) {
+		t.Fatal("old-password login survived concurrent password change")
+	}
+	if _, err = s.Login(ctx, "race@example.com", password); err == nil {
+		t.Fatal("old password accepted")
 	}
 }

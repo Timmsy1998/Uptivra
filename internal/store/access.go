@@ -34,9 +34,24 @@ func (s *Store) Login(ctx context.Context, email, password string) (string, erro
 	if e != nil || passErr != nil || got != email {
 		return "", errors.New("invalid credentials")
 	}
+	tx, e := s.DB.Begin(ctx)
+	if e != nil {
+		return "", e
+	}
+	defer tx.Rollback(ctx)
+	// Serialize session issuance with password changes without holding a lock during bcrypt.
+	var current string
+	if e = tx.QueryRow(ctx, `SELECT password_hash FROM accounts WHERE id=1 FOR SHARE`).Scan(&current); e != nil {
+		return "", e
+	}
+	if current != hash {
+		return "", errors.New("credentials changed; sign in again")
+	}
 	token := cryptobox.Token()
-	_, e = s.DB.Exec(ctx, `INSERT INTO sessions(token_hash,expires_at) VALUES($1,$2)`, cryptobox.Hash(token), time.Now().Add(12*time.Hour))
-	return token, e
+	if _, e = tx.Exec(ctx, `INSERT INTO sessions(token_hash,expires_at) VALUES($1,$2)`, cryptobox.Hash(token), time.Now().Add(12*time.Hour)); e != nil {
+		return "", e
+	}
+	return token, tx.Commit(ctx)
 }
 func (s *Store) Session(ctx context.Context, token string) bool {
 	var ok bool
@@ -113,8 +128,12 @@ func (s *Store) ChangePassword(ctx context.Context, old, next string) error {
 		return e
 	}
 	defer tx.Rollback(ctx)
-	if _, e = tx.Exec(ctx, `UPDATE accounts SET password_hash=$1 WHERE id=1`, string(h)); e != nil {
+	updated, e := tx.Exec(ctx, `UPDATE accounts SET password_hash=$1 WHERE id=1 AND password_hash=$2`, string(h), hash)
+	if e != nil {
 		return e
+	}
+	if updated.RowsAffected() != 1 {
+		return errors.New("credentials changed; sign in again")
 	}
 	if _, e = tx.Exec(ctx, `DELETE FROM sessions`); e != nil {
 		return e
