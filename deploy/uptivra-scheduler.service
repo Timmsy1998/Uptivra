@@ -1,0 +1,22 @@
+[Unit]
+Description=Uptivra minute scheduler
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=uptivra
+Group=uptivra
+WorkingDirectory=/opt/uptivra
+EnvironmentFile=/etc/uptivra.env
+ExecStart=/opt/uptivra/uptivra schedule
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=65
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

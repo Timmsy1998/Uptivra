@@ -1,0 +1,22 @@
+[Unit]
+Description=Uptivra web workspace
+Wants=network-online.target
+After=network-online.target uptivra-api.service
+
+[Service]
+User=uptivra
+Group=uptivra
+WorkingDirectory=/opt/uptivra/web
+EnvironmentFile=/etc/uptivra-web.env
+Environment=HOSTNAME=127.0.0.1 PORT=3000 NODE_ENV=production
+ExecStart=/usr/bin/node /opt/uptivra/web/server.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
