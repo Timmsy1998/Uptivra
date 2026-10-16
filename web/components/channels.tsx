@@ -224,6 +224,29 @@ export default function Channels() {
                   </select>
                 </label>
                 <button
+                  className="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    setError("");
+                    setNotice("");
+                    try {
+                      await api("/channels/" + c.id + "/test", "POST");
+                      setNotice(
+                        "Test queued. Open Delivery & scheduler to inspect the result after the next scheduler run.",
+                      );
+                    } catch (e) {
+                      setError(
+                        e instanceof Error ? e.message : "Unable to queue test",
+                      );
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  Test {c.name}
+                </button>
+                <button
                   className="icon-button danger"
                   aria-label={"Delete " + c.name}
                   onClick={async () => {

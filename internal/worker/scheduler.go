@@ -25,10 +25,18 @@ type Report struct {
 }
 
 // Tick waits for all work; no goroutines survive a serverless invocation.
-func Tick(ctx context.Context, s *store.Store, appOrigin string) (Report, error) {
-	var report Report
+func Tick(ctx context.Context, s *store.Store, appOrigin string) (report Report, resultErr error) {
 	ctx, cancel := context.WithTimeout(ctx, 55*time.Second)
 	defer cancel()
+	runID, e := s.StartSchedulerRun(ctx)
+	if e != nil {
+		return report, e
+	}
+	defer func() {
+		if e := s.FinishSchedulerRun(ctx, runID, resultErr == nil, report.Claimed, report.Recorded, report.Delivered); resultErr == nil {
+			resultErr = e
+		}
+	}()
 	ms, e := s.Claim(ctx)
 	if e != nil {
 		return report, e
@@ -73,8 +81,8 @@ func Tick(ctx context.Context, s *store.Store, appOrigin string) (Report, error)
 	var delivered atomic.Int64
 	parallel(len(ds), 8, func(i int) {
 		d := ds[i]
-		ok := Send(ctx, d, netguard.Client(5*time.Second), strings.TrimSuffix(appOrigin, "/")+"/status")
-		if e := s.FinishDelivery(ctx, d, ok); e != nil {
+		ok, outcome := SendResult(ctx, d, netguard.Client(5*time.Second), strings.TrimSuffix(appOrigin, "/")+"/status")
+		if e := s.FinishDeliveryResult(ctx, d, ok, outcome); e != nil {
 			fail(e)
 		} else if ok {
 			delivered.Add(1)
@@ -109,6 +117,10 @@ func Signature(secret, timestamp string, body []byte) string {
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 func Send(ctx context.Context, d store.Delivery, client Doer, statusPageURL string) bool {
+	ok, _ := SendResult(ctx, d, client, statusPageURL)
+	return ok
+}
+func SendResult(ctx context.Context, d store.Delivery, client Doer, statusPageURL string) (bool, string) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	body := []byte(d.Payload)
@@ -116,12 +128,12 @@ func Send(ctx context.Context, d store.Delivery, client Doer, statusPageURL stri
 		var e error
 		body, e = discordPayload(body, statusPageURL)
 		if e != nil {
-			return false
+			return false, "invalid_payload"
 		}
 	}
 	req, e := http.NewRequestWithContext(ctx, http.MethodPost, d.Channel.URL, bytes.NewReader(body))
 	if e != nil {
-		return false
+		return false, "invalid_request"
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "Uptivra/1.0")
@@ -133,8 +145,11 @@ func Send(ctx context.Context, d store.Delivery, client Doer, statusPageURL stri
 	}
 	resp, e := client.Do(req)
 	if e != nil {
-		return false
+		return false, "network_error"
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode >= 200 && resp.StatusCode < 300
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return true, "delivered"
+	}
+	return false, "http_" + strconv.Itoa(resp.StatusCode)
 }

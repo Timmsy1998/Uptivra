@@ -107,7 +107,14 @@ func (s *Store) ClaimDeliveries(ctx context.Context) ([]Delivery, error) {
 	return out, rows.Err()
 }
 func (s *Store) FinishDelivery(ctx context.Context, d Delivery, ok bool) error {
+	outcome := "network_or_http_error"
+	if ok {
+		outcome = "delivered"
+	}
+	return s.FinishDeliveryResult(ctx, d, ok, outcome)
+}
+func (s *Store) FinishDeliveryResult(ctx context.Context, d Delivery, ok bool, outcome string) error {
 	delay := time.Duration(1<<min(d.Attempts, 8)) * time.Minute
-	_, e := s.DB.Exec(ctx, `UPDATE deliveries SET attempts=attempts+1,next_attempt=$3,delivered_at=CASE WHEN $4 THEN now() ELSE NULL END,failed_at=CASE WHEN NOT $4 AND attempts>=7 THEN now() ELSE NULL END,lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2 AND lease_until>now()`, d.ID, d.Lease, time.Now().Add(delay), ok)
+	_, e := s.DB.Exec(ctx, `UPDATE deliveries SET last_attempt_at=now(),outcome=$5,attempts=attempts+1,next_attempt=$3,delivered_at=CASE WHEN $4 THEN now() ELSE NULL END,failed_at=CASE WHEN NOT $4 AND attempts>=7 THEN now() ELSE NULL END,lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2 AND lease_until>now()`, d.ID, d.Lease, time.Now().Add(delay), ok, outcome)
 	return e
 }

@@ -1695,3 +1695,18 @@ td small {
 .incident-editor label {
   font-size: 12px;
 }
+
+.operations-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+}
+.operations-counts strong {
+  font-size: 1.8rem;
+  display: block;
+}
+.delivery-event {
+  display: block;
+  color: var(--muted);
+  margin-top: 0.3rem;
+}

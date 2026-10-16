@@ -31,6 +31,9 @@ var incidentUpdatesMigration string
 //go:embed migrations/005_admins.sql
 var adminsMigration string
 
+//go:embed migrations/006_operations.sql
+var operationsMigration string
+
 type Store struct {
 	DB  *pgxpool.Pool
 	Box *cryptobox.Box
@@ -71,7 +74,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	for _, migration := range []struct {
 		version int
 		sql     string
-	}{{2, heartbeatMigration}, {3, channelGroupsMigration}, {4, incidentUpdatesMigration}, {5, adminsMigration}} {
+	}{{2, heartbeatMigration}, {3, channelGroupsMigration}, {4, incidentUpdatesMigration}, {5, adminsMigration}, {6, operationsMigration}} {
 		var applied bool
 		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_versions WHERE version=$1)`, migration.version).Scan(&applied); e != nil {
 			return e
@@ -356,7 +359,7 @@ func (s *Store) Cleanup(ctx context.Context) error {
 	if e != nil {
 		return e
 	}
-	for _, q := range []string{`DELETE FROM sessions WHERE expires_at<now()`, `DELETE FROM rate_limits WHERE resets_at<now()`, `DELETE FROM deliveries WHERE COALESCE(delivered_at,failed_at)<now()-interval '30 days'`, `DELETE FROM incidents WHERE resolved_at<now()-(SELECT retention_days FROM settings WHERE id=1)*interval '1 day'`} {
+	for _, q := range []string{`DELETE FROM scheduler_runs WHERE id IN (SELECT id FROM scheduler_runs WHERE started_at<now()-interval '30 days' LIMIT 5000)`, `DELETE FROM sessions WHERE expires_at<now()`, `DELETE FROM rate_limits WHERE resets_at<now()`, `DELETE FROM deliveries WHERE COALESCE(delivered_at,failed_at)<now()-interval '30 days'`, `DELETE FROM incidents WHERE resolved_at<now()-(SELECT retention_days FROM settings WHERE id=1)*interval '1 day'`} {
 		if _, e = s.DB.Exec(ctx, q); e != nil {
 			return fmt.Errorf("cleanup: %w", e)
 		}

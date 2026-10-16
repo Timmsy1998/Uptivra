@@ -33,7 +33,10 @@ func discordPayload(raw []byte, statusPageURL string) ([]byte, error) {
 	}
 	e := discordEmbed{Title: "🔴 Incident opened", Description: "The monitor has crossed its failure threshold.", Color: 0xad3730}
 	status := "Down"
-	if p.Type == "incident.resolved" {
+	if p.Type == "notification.test" {
+		e.Title, e.Description, e.Color = "🔵 Channel delivery test", "This test notification confirms that Uptivra can deliver to this channel.", 0x4f6389
+		status = "Test"
+	} else if p.Type == "incident.resolved" {
 		e.Title, e.Description, e.Color = "🟢 Service recovered", "The monitor has crossed its recovery threshold. The incident is resolved.", 0x286b4c
 		status = "Healthy"
 	} else if p.Type == "incident.updated" && p.Update != nil {
