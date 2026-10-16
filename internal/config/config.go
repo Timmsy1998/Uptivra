@@ -9,6 +9,9 @@ import (
 
 type Config struct{ DatabaseURL, EncryptionKey, CronSecret, Origin, Port, SetupCode string }
 
+// DemoMode matches the frontend build flag. Demo deployments never open a database.
+func DemoMode() bool { return os.Getenv("NEXT_PUBLIC_DEMO_MODE") == "true" }
+
 func Load() (Config, error) {
 	c := Config{DatabaseURL: os.Getenv("DATABASE_URL"), EncryptionKey: os.Getenv("ENCRYPTION_KEY"), CronSecret: os.Getenv("CRON_SECRET"), Origin: strings.TrimSuffix(os.Getenv("APP_ORIGIN"), "/"), Port: os.Getenv("PORT"), SetupCode: os.Getenv("SETUP_CODE")}
 	if c.SetupCode != "" && (len(c.SetupCode) != 4 || strings.Trim(c.SetupCode, "0123456789") != "") {

@@ -16,6 +16,16 @@ import (
 
 func DB(t *testing.T) *store.Store {
 	t.Helper()
+	s := UnmigratedDB(t)
+	if e := s.Migrate(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	return s
+}
+
+// UnmigratedDB creates an isolated, empty schema for startup migration tests.
+func UnmigratedDB(t *testing.T) *store.Store {
+	t.Helper()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("set TEST_DATABASE_URL to run PostgreSQL integration tests")
@@ -43,8 +53,5 @@ func DB(t *testing.T) *store.Store {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { s.DB.Exec(context.Background(), "DROP SCHEMA "+ident+" CASCADE"); s.DB.Close() })
-	if e = s.Migrate(context.Background()); e != nil {
-		t.Fatal(e)
-	}
 	return s
 }

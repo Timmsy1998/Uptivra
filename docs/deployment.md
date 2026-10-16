@@ -1,6 +1,6 @@
 # Deployment
 
-Choose one scheduler: Vercel cron, `uptivra schedule`, or an external minute job running `uptivra tick`. PostgreSQL is the durable store. Never expose PostgreSQL directly to the Internet. Run migrations before serving a new version and keep the encryption key across deployments.
+Choose one scheduler: Vercel cron, `uptivra schedule`, or an external minute job running `uptivra tick`. PostgreSQL is the durable store. Never expose PostgreSQL directly to the Internet. Every Go process automatically applies pending migrations before serving requests or running scheduler/admin commands. Vercel applies them on the first backend invocation of each function instance. Keep the encryption key across deployments.
 
 ## Environment
 
@@ -12,7 +12,7 @@ Choose one scheduler: Vercel cron, `uptivra schedule`, or an external minute job
 | `APP_ORIGIN` | Go processes/function | Exact browser origin, e.g. `https://status.example.com`; no path, query or fragment. HTTP is accepted only for localhost development |
 | `SETUP_CODE` | Go processes/function, optional | Exactly four ASCII digits to enable first-owner browser setup; remove after provisioning. Disabled when omitted |
 | `PORT` | Native Go server | Default `8080` |
-| `NEXT_PUBLIC_DEMO_MODE` | Next.js build | Set exactly `true` for the temporary browser demo; unset for normal authenticated operation. Rebuild when changing |
+| `NEXT_PUBLIC_DEMO_MODE` | Next.js build / Go runtime | Set exactly `true` for the temporary browser demo. Go commands exit without database access or migrations, and the Go function rejects API requests. Unset for live operation; rebuild the frontend when changing |
 | `API_ORIGIN` | Next.js server | Fixed Go backend origin; never a `NEXT_PUBLIC_` variable |
 | `VERCEL_AUTOMATION_BYPASS_SECRET` | Next.js server, optional | Backend Vercel deployment-protection bypass; keep server-side |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Bootstrap or password recovery command only | Password 14–72 bytes. Bootstrap refuses to replace an existing account |
@@ -22,7 +22,7 @@ The application does not load `.env` itself. Compose reads it; native shell sess
 
 ## Docker Compose
 
-Follow the [README quick start](../README.md#run-locally). Compose builds non-root Go and Next.js images, waits for PostgreSQL readiness, runs an explicit migration service, then starts the API, scheduler and frontend. Only `127.0.0.1:3000` is published. The `postgres-data` volume is persistent; `docker compose down -v` destroys it.
+Follow the [README quick start](../README.md#run-locally). Compose builds non-root Go and Next.js images, waits for PostgreSQL readiness, runs a migration preflight service, then starts the API, scheduler and frontend. The API and scheduler also check migrations themselves, including when run outside Compose. Only `127.0.0.1:3000` is published. The `postgres-data` volume is persistent; `docker compose down -v` destroys it.
 
 For a public installation, terminate HTTPS with a reverse proxy on the host. A minimal Caddy site is:
 
@@ -43,7 +43,7 @@ docker compose exec api wget -qO- http://localhost:8080/healthz
 curl --fail https://status.example.com/api/v1/public/status
 ```
 
-Back up before upgrading. Build the new images, stop application writers, run migrations explicitly, then start services:
+Back up before upgrading and review migration compatibility. Build the new images, stop application writers, optionally apply migrations as a preflight, then start services (which also migrate automatically):
 
 ```sh
 docker compose build
@@ -76,7 +76,6 @@ set -a
 set +a
 go mod download
 go build -trimpath -o bin/uptivra ./cmd/uptivra
-./bin/uptivra migrate
 read -r -p 'Administrator email: ' ADMIN_EMAIL
 read -r -s -p 'Administrator password: ' ADMIN_PASSWORD
 printf '\n'
@@ -86,7 +85,7 @@ unset ADMIN_EMAIL ADMIN_PASSWORD
 npm --prefix web ci
 ```
 
-Use three terminals with the same exported environment: `./bin/uptivra serve`, `./bin/uptivra schedule` and `npm --prefix web run dev`. Open `http://localhost:3000`. Bootstrap is a one-time command; subsequent password changes are in the authenticated settings screen. There is no unauthenticated password-reset endpoint.
+Bootstrap above initializes the schema automatically. You can also run `./bin/uptivra migrate` as a standalone preflight. Use three terminals with the same exported environment: `./bin/uptivra serve`, `./bin/uptivra schedule` and `npm --prefix web run dev`. Open `http://localhost:3000`. Bootstrap is a one-time command; subsequent password changes are in the authenticated settings screen. There is no unauthenticated password-reset endpoint.
 
 If locked out, use the trusted terminal recovery command. Load the same `DATABASE_URL`, `APP_ORIGIN`, `ENCRYPTION_KEY` and `CRON_SECRET` as the live backend; for Neon, use its direct connection URL to the same branch and database. Rebuild the binary from this version first. The email must match the stored account exactly. This replaces the password and revokes all browser sessions in one transaction; API keys remain valid. Database access is the recovery authority, so keep this command and its credentials in a trusted environment.
 
@@ -149,8 +148,8 @@ The demo browser suite builds and starts a production frontend on port 3100 with
 Use **two projects from the same repository**. The root Go project runs the API and scheduler; the `web` project runs Next.js. This keeps Go business logic independent and uses the supported Go Function adapter. Vercel's Go runtime is currently beta. A mixed Services setup is not required by this implementation; it has not been verified here.
 
 1. Provision PostgreSQL reachable from Vercel, preferably in the function region. Configure encrypted transport and a managed connection pooler where appropriate. Each function instance opens at most four connections; concurrent instances multiply this total.
-2. Reserve the frontend production origin. Generate the encryption key and cron secret once. Run the native binary's `migrate` and `bootstrap` commands from a trusted environment against the production database using the production `APP_ORIGIN`. Remove bootstrap credentials afterward. Do not upload them to either project.
-3. Create the **backend project**, repository root, framework **Other**. Keep the root `vercel.json`; it defines the Go function, a 60-second duration, routing and `* * * * *` cron at `/api/cron`. There is no frontend install/build command in this project. Set `DATABASE_URL`, `ENCRYPTION_KEY`, `CRON_SECRET` and `APP_ORIGIN` for Production. Deploy after schema initialization.
+2. Reserve the frontend production origin. Generate the encryption key and cron secret once. For browser provisioning, set a four-digit `SETUP_CODE` on the backend. Alternatively, run the native binary’s `bootstrap` command from a trusted environment against the production database; it migrates automatically. Remove bootstrap credentials afterward and do not upload them to either project.
+3. Create the **backend project**, repository root, framework **Other**. Keep the root `vercel.json`; it defines the Go function, a 60-second duration, routing and `* * * * *` cron at `/api/cron`. There is no frontend install/build command in this project. Set `DATABASE_URL`, `ENCRYPTION_KEY`, `CRON_SECRET` and `APP_ORIGIN` for Production. Deploy; the first backend invocation initializes or upgrades the schema automatically before handling the request.
 4. Create the **frontend project**, root directory **web**, framework **Next.js**. Set server-side `API_ORIGIN` to the backend production HTTPS origin. Deploy to the exact origin configured by `APP_ORIGIN`; an origin mismatch blocks cookie mutations. For a protected backend, also set its automation bypass secret in the frontend's `VERCEL_AUTOMATION_BYPASS_SECRET`.
 5. Confirm direct backend `/healthz`, frontend login/CRUD, public status, and an actual cron run in Vercel's dashboard. Check that configured deployment protection permits platform cron and your required health checks. Direct API clients also need any platform protection credentials. Frontend public status must be reachable without a Vercel login if you intend it to be public.
 6. Follow the [acceptance checklist](operations.md#acceptance) before depending on notifications. Test a failed target and recovery with a real receiver, rather than merely observing a successful cron HTTP response.
@@ -167,7 +166,7 @@ Official references: [Go runtime](https://vercel.com/docs/functions/runtimes/go)
 
 The [systemd examples](../deploy) run the Go server, scheduler and a prepared Next.js standalone bundle. Create an unprivileged `uptivra` account, place the binary at `/opt/uptivra/uptivra`, and copy the complete standalone bundle (including static/public files) to `/opt/uptivra/web`. Adjust the Node executable path in the web unit for your installation. Install the three units into `/etc/systemd/system`.
 
-Store the backend environment in `/etc/uptivra.env`, owned by `root:uptivra` with mode `0640`. It needs the four required Go variables and `PORT=8080`. Run migrations and bootstrap with that environment before starting services. Install the frontend environment at `/etc/uptivra-web.env` with `API_ORIGIN=http://127.0.0.1:8080`; apply the same permissions. Do not retain administrator bootstrap credentials in service files.
+Store the backend environment in `/etc/uptivra.env`, owned by `root:uptivra` with mode `0640`. It needs the four required Go variables and `PORT=8080`. Services migrate automatically on startup. Provision the owner through browser setup or run bootstrap with that environment; bootstrap also migrates first. Install the frontend environment at `/etc/uptivra-web.env` with `API_ORIGIN=http://127.0.0.1:8080`; apply the same permissions. Do not retain administrator bootstrap credentials in service files.
 
 ```sh
 sudo systemctl daemon-reload
@@ -179,7 +178,13 @@ The native API listens on all interfaces at its configured port. Restrict port 8
 
 ## Applying migrations to Vercel PostgreSQL
 
-Vercel deployments do not run database migrations automatically. From a trusted local checkout of the version being deployed, run the migration CLI against the same database and branch used by the production Go project. Back up first and pause application writes and cron during the upgrade. For Neon, use the direct connection URL to that branch and database, with the provider-required TLS settings.
+Migrations run automatically at backend startup on every host: Vercel function cold starts, Docker, systemd, native `serve`, `schedule`, `tick` and administrator CLI commands. On Vercel this happens at runtime on the first invocation, not during the build. Request `/healthz` after deploying to trigger initialization and verify readiness before routing users to a new deployment. No separate migration command is required.
+
+All pending migrations commit together under a PostgreSQL transaction advisory lock, so concurrent instances cannot apply them twice. Already-applied versions are skipped without repeating base-schema DDL. Native startup has a 30-second limit; Vercel initialization has an 8-second limit and shares a 55-second total invocation budget with request/scheduler work, within the configured 60-second function duration. If startup fails or times out, native commands exit unsuccessfully and Vercel returns HTTP 503 without caching an application handler; a later invocation retries. The database role must have permission to create and alter the application schema. Do not use transaction-pooler modes that reject multi-statement migration SQL; use a compatible pooler or direct connection with provider-required TLS.
+
+Set `NEXT_PUBLIC_DEMO_MODE=true` for the demo frontend build. No backend is needed. If a Go backend is also deployed, set the same flag in its runtime environment: CLI commands exit successfully without loading database configuration or migrating, and the function returns HTTP 403 without opening a database. A frontend flag cannot configure a separate backend project.
+
+Back up before upgrading and review schema compatibility with any old instances still serving. Keep migrations compatible with rolling deployments; automatic startup does not make destructive schema changes safe. For migrations needing more than Vercel’s 8-second initialization budget (up to the CLI’s 30-second limit), or a controlled maintenance window, use the optional CLI preflight below before enabling traffic. From a trusted checkout of the version being deployed, target the same database and branch as the Go project. Pause writes and cron when the upgrade requires it. For Neon, use the direct connection URL to that branch and database with provider-required TLS.
 
 In Bash, read the existing production values without saving them in shell history:
 
@@ -196,6 +201,6 @@ go run ./cmd/uptivra migrate
 unset DATABASE_URL ENCRYPTION_KEY CRON_SECRET APP_ORIGIN
 ```
 
-Use the existing encryption key and cron secret, not newly generated values. The CLI requires valid backend configuration even for migrations. Applied migrations are skipped; a failed command exits unsuccessfully. After success, deploy the matching backend and frontend, then resume writes and cron. Check readiness, sign-in and scheduler health. These instructions describe the workflow; a remote Vercel migration was not performed here.
+Use the existing encryption key and cron secret, not newly generated values. The CLI requires valid backend configuration even for migrations. Applied migrations are skipped; a failed command exits unsuccessfully. After a successful preflight, deploy the matching backend and frontend, then resume any paused writes and cron. Check readiness, sign-in and scheduler health. These instructions describe the workflow; a remote Vercel migration was not performed here.
 
-For initial browser provisioning, configure `SETUP_CODE` in the backend Vercel environment before deploying. It must be exactly four digits. Apply migrations, deploy, create the first owner on the login page, then remove the code and redeploy. Existing installations preserve their administrator as owner. Migration 008 records cadence on future checks; it does not backfill unknown historical coverage.
+For initial browser provisioning, configure `SETUP_CODE` in the backend Vercel environment before deploying. It must be exactly four digits. Deploy, confirm backend `/healthz` succeeds, create the first owner on the login page, then remove the code and redeploy. Existing installations preserve their administrator as owner. Migration 008 records cadence on future checks; it does not backfill unknown historical coverage.

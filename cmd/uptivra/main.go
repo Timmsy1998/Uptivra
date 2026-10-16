@@ -23,6 +23,19 @@ func main() {
 	}
 }
 func run() error {
+	command := "serve"
+	if len(os.Args) > 1 {
+		command = os.Args[1]
+	}
+	switch command {
+	case "serve", "migrate", "bootstrap", "reset-password", "tick", "schedule":
+	default:
+		return &commandError{}
+	}
+	if config.DemoMode() {
+		slog.Info("demo mode: backend and database migrations disabled")
+		return nil
+	}
 	c, e := config.Load()
 	if e != nil {
 		return e
@@ -33,20 +46,17 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	startup, cancel := context.WithTimeout(ctx, 10*time.Second)
+	startup, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	s, e := store.Open(startup, c.DatabaseURL, box)
+	s, e := store.OpenMigrated(startup, c.DatabaseURL, box)
+	cancel()
 	if e != nil {
 		return e
 	}
 	defer s.DB.Close()
-	command := "serve"
-	if len(os.Args) > 1 {
-		command = os.Args[1]
-	}
 	switch command {
 	case "migrate":
-		return s.Migrate(ctx)
+		return nil
 	case "bootstrap":
 		return s.Bootstrap(ctx, os.Getenv("ADMIN_EMAIL"), os.Getenv("ADMIN_PASSWORD"))
 	case "reset-password":

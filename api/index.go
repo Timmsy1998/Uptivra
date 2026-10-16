@@ -19,29 +19,48 @@ var mu sync.Mutex
 var app http.Handler
 
 func Handler(w http.ResponseWriter, r *http.Request) {
+	if config.DemoMode() {
+		http.Error(w, "API disabled in demo mode", http.StatusForbidden)
+		return
+	}
+	// Include cold-start migration time in the invocation budget (maxDuration 60s).
+	ctx, cancel := context.WithTimeout(r.Context(), 55*time.Second)
+	defer cancel()
+	r = r.WithContext(ctx)
 	mu.Lock()
+	if ctx.Err() != nil {
+		mu.Unlock()
+		http.Error(w, "service initialization unavailable", http.StatusServiceUnavailable)
+		return
+	}
 	if app == nil {
-		c, e := config.Load()
-		if e == nil {
-			box, err := cryptobox.New(c.EncryptionKey)
-			e = err
-			if e == nil {
-				ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
-				s, err := store.Open(ctx, c.DatabaseURL, box)
-				cancel()
-				e = err
-				if e == nil {
-					app = (&server.Server{Store: s, Config: c}).Handler()
-				}
-			}
-		}
+		startup, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+		s, e := initialize(startup)
+		cancel()
 		if e != nil {
 			mu.Unlock()
 			http.Error(w, "service configuration or database unavailable", 503)
 			return
 		}
+		app = s.Handler()
 	}
 	h := app
 	mu.Unlock()
 	h.ServeHTTP(w, r)
+}
+
+func initialize(ctx context.Context) (*server.Server, error) {
+	c, e := config.Load()
+	if e != nil {
+		return nil, e
+	}
+	box, e := cryptobox.New(c.EncryptionKey)
+	if e != nil {
+		return nil, e
+	}
+	s, e := store.OpenMigrated(ctx, c.DatabaseURL, box)
+	if e != nil {
+		return nil, e
+	}
+	return &server.Server{Store: s, Config: c}, nil
 }

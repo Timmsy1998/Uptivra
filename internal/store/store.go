@@ -65,6 +65,22 @@ func Open(ctx context.Context, url string, box *cryptobox.Box) (*Store, error) {
 	}
 	return &Store{p, box}, nil
 }
+
+// OpenMigrated returns a usable store only after all bundled migrations commit.
+// Callers must supply a bounded startup context. Failed startup releases the pool
+// so that a later process or function invocation can retry safely.
+func OpenMigrated(ctx context.Context, url string, box *cryptobox.Box) (*Store, error) {
+	s, e := Open(ctx, url, box)
+	if e != nil {
+		return nil, e
+	}
+	if e = s.Migrate(ctx); e != nil {
+		s.DB.Close()
+		return nil, errors.New("database migrations failed; check database permissions and availability")
+	}
+	return s, nil
+}
+
 func (s *Store) Migrate(ctx context.Context) error {
 	tx, e := s.DB.Begin(ctx)
 	if e != nil {
@@ -74,8 +90,20 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if _, e = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(884127)"); e != nil {
 		return e
 	}
-	if _, e = tx.Exec(ctx, schema); e != nil {
+	var versionsTable *string
+	if e = tx.QueryRow(ctx, `SELECT to_regclass('schema_versions')::text`).Scan(&versionsTable); e != nil {
 		return e
+	}
+	var initialized bool
+	if versionsTable != nil {
+		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_versions WHERE version=1)`).Scan(&initialized); e != nil {
+			return e
+		}
+	}
+	if !initialized {
+		if _, e = tx.Exec(ctx, schema); e != nil {
+			return e
+		}
 	}
 	for _, migration := range []struct {
 		version int

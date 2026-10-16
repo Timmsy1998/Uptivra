@@ -2,7 +2,7 @@
 
 Use a heartbeat monitor when a service can make outbound HTTPS requests but cannot expose a public health endpoint. This requires a live PostgreSQL-backed Uptivra installation and a running scheduler. The browser-only demo cannot receive live signals.
 
-1. Build the updated Go executable and run `uptivra migrate` against your live database using the existing migration instructions. This applies migration 2 without resetting existing monitors. Redeploy both the backend and frontend.
+1. Redeploy the updated backend and frontend. Backend startup automatically applies pending migrations, including migration 2, without resetting existing monitors. `uptivra migrate` remains available as an optional preflight.
 2. In the dashboard choose **New monitor → Heartbeat (outbound signal)**. Start with interval **60 seconds**, grace **120 seconds**, failure threshold **1**, recovery threshold **1**. Save, then open the monitor.
 3. Choose **Generate / replace heartbeat token** and save the displayed URL and token to the bot's environment. Replacing a token invalidates its predecessor immediately. Tokens are shown once and only their hashes are stored in PostgreSQL.
 4. Send `POST` to the displayed URL with `Authorization: Bearer <token>`. No body is required. Success returns `204`. Never put the token in a URL, logs, source control, or Discord messages. An administrator API key is not a heartbeat token.

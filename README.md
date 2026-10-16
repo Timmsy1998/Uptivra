@@ -75,7 +75,7 @@ The scheduler claims up to 32 checks and 16 notifications per invocation, with e
 
 ## Deployment
 
-- **Docker / VPS:** [Compose and systemd](docs/deployment.md). Migrations are explicit; PostgreSQL data is persisted in a named volume.
+- **Docker / VPS:** [Compose and systemd](docs/deployment.md). Migrations run automatically before backend startup; PostgreSQL data is persisted in a named volume.
 - **Vercel Pro:** [two-project deployment](docs/deployment.md#vercel-pro). The Go API uses the beta Go Functions runtime and authenticated minute cron; the frontend is a separate Next.js project. Go Functions are available across plans, but the supplied minute cron needs Pro or higher. See [Vercel cron limits](https://vercel.com/docs/cron-jobs/usage-and-pricing) and the [Go runtime](https://vercel.com/docs/functions/runtimes/go).
 - **Other hosts:** run the Go binary plus the Next.js standalone server with a managed PostgreSQL database. Providers must support outbound public HTTP(S), the execution budget and a reliable minute scheduler. Compatibility beyond the documented paths has not been verified.
 
@@ -122,7 +122,7 @@ Monitor services without a public endpoint using [outbound heartbeats](docs/hear
 
 ### Administrator setup and ownership
 
-For browser setup, set `SETUP_CODE` to exactly four digits in the backend environment, apply migrations and open the login page. Enter that code, an email and a password of 14–72 bytes to create the owner. Alternatively, use the CLI bootstrap above. Setup closes permanently while any account exists; remove `SETUP_CODE` after use. Five setup attempts per 15 minutes are allowed globally, so provision promptly on a trusted network.
+For browser setup, set `SETUP_CODE` to exactly four digits in the backend environment, deploy and open the login page. The backend applies migrations automatically before serving requests. Enter that code, an email and a password of 14–72 bytes to create the owner. Alternatively, use the CLI bootstrap above. Setup closes permanently while any account exists; remove `SETUP_CODE` after use. Five setup attempts per 15 minutes are allowed globally, so provision promptly on a trusted network.
 
 The owner can create administrators, delete other administrators and transfer ownership under Settings. All administrators can operate monitoring and change their own password. Only the current owner can manage administrator accounts; the current owner cannot be deleted. Transferring ownership makes the previous owner an ordinary administrator, who can then be removed by the new owner. Account deletion and password changes revoke that account’s sessions.
 

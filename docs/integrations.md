@@ -102,7 +102,7 @@ API clients may include `"group":"Discord bots"` in `POST /api/v1/channels`, or 
 
 Routing is evaluated when an incident event is queued. Changing the filter preserves already queued deliveries and retries, and a recovery is routed using the monitor's group at recovery time. Filters apply to both public and private monitors and are not an access-control boundary.
 
-Run `uptivra migrate` before deploying this version of the backend. Migration 003 preserves existing destinations with the all-groups default.
+Backend startup applies pending migrations automatically; `uptivra migrate` remains an optional preflight. Migration 003 preserves existing destinations with the all-groups default.
 
 ### Incident details and progress updates
 
@@ -114,4 +114,4 @@ Use `POST /api/v1/incidents/{id}/updates` with `{"status":"monitoring","message"
 
 Publishing atomically queues `incident.updated` to the monitor's current group destinations. Signed webhooks include an `update` object (`id`, `status`, `message`, `created_at`), and `resolved_at` when already recovered. Discord sends a blue embed with the stage, note and status-page link. Long escaped Discord text may be truncated; the status page retains the complete note. Delivery uses the existing scheduler and durable retries, so it is not immediate and may arrive out of order.
 
-Run `uptivra migrate` before deploying the updated backend. Migration 004 adds the incident update timeline; no new environment variables are needed.
+The updated backend automatically applies pending migrations before serving requests. Migration 004 adds the incident update timeline; no new environment variables are needed.

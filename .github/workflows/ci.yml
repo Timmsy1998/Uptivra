@@ -70,7 +70,6 @@ jobs:
           set -euo pipefail
           export ENCRYPTION_KEY="$(openssl rand -base64 32)"
           export CRON_SECRET="$(openssl rand -hex 32)"
-          /tmp/uptivra migrate
           /tmp/uptivra bootstrap
           /tmp/uptivra serve > /tmp/uptivra-api.log 2>&1 &
           api_pid=$!
