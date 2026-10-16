@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Activity, ArrowUpRight, ChevronRight } from "lucide-react";
 import { api } from "@/lib/api";
 import { Brand, Theme, ErrorMessage } from "./shared";
@@ -12,6 +12,18 @@ export default function Login({
 }) {
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
+  const [setup, setSetup] = useState(false);
+  useEffect(() => {
+    api<{ required: boolean; enabled: boolean }>("/auth/setup")
+      .then((v) => {
+        setSetup(v.enabled);
+        if (v.required && !v.enabled)
+          setError(
+            "Set SETUP_CODE on the server or use CLI bootstrap to create the first administrator.",
+          );
+      })
+      .catch((e) => setError(e.message));
+  }, []);
   return (
     <div className="login-page">
       <header>
@@ -37,8 +49,12 @@ export default function Login({
         </div>
         <section className="login-form">
           <span className="eyebrow">Workspace access</span>
-          <h2>Sign in to Uptivra</h2>
-          <p>Use your administrator account to continue.</p>
+          <h2>{setup ? "Set up Uptivra" : "Sign in to Uptivra"}</h2>
+          <p>
+            {setup
+              ? "Create the first administrator and workspace owner."
+              : "Use your administrator account to continue."}
+          </p>
           <ErrorMessage message={error} />
           <form
             onSubmit={async (e) => {
@@ -47,6 +63,16 @@ export default function Login({
               setBusy(true);
               setError("");
               try {
+                if (setup) {
+                  await api("/auth/setup", "POST", {
+                    email: f.get("email"),
+                    password: f.get("password"),
+                    code: f.get("code"),
+                  });
+                  setSetup(false);
+                  setError("Administrator created. Sign in to continue.");
+                  return;
+                }
                 await api("/auth/login", "POST", {
                   email: f.get("email"),
                   password: f.get("password"),
@@ -70,23 +96,45 @@ export default function Login({
                 placeholder="you@example.com"
               />
             </label>
+            {setup && (
+              <label>
+                Verification code
+                <input
+                  name="code"
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]{4}"
+                  minLength={4}
+                  maxLength={4}
+                  required
+                  autoComplete="off"
+                />
+                <small>The four digits configured in SETUP_CODE.</small>
+              </label>
+            )}
             <label>
               Password
               <input
                 name="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete={setup ? "new-password" : "current-password"}
+                minLength={setup ? 14 : undefined}
+                maxLength={72}
                 required
               />
             </label>
             <button className="button primary" disabled={busy}>
-              {busy ? "Signing in…" : "Sign in"}
+              {busy
+                ? "Please wait…"
+                : setup
+                  ? "Create owner account"
+                  : "Sign in"}
               <ChevronRight size={16} />
             </button>
           </form>
           <p className="footnote">
-            First time here? Create your administrator with the{" "}
-            <code>bootstrap</code> command.
+            Initial setup requires the verification code configured by your
+            server operator.
           </p>
           <a className="text-button" href="/status">
             View public status

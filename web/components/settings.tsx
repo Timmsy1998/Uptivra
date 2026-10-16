@@ -1,4 +1,5 @@
 "use client";
+import Admins from "./admins";
 import { demoMode } from "@/lib/demo-mode";
 import { useEffect, useState } from "react";
 import { KeyRound, Trash2 } from "lucide-react";
@@ -123,6 +124,7 @@ export default function SettingsPanel({ onLogout }: { onLogout: () => void }) {
         </p>
       ) : (
         <>
+          <Admins />
           <section className="panel settings-panel">
             <div>
               <h2>API keys</h2>
@@ -231,8 +233,8 @@ export default function SettingsPanel({ onLogout }: { onLogout: () => void }) {
             <div>
               <h2>Administrator password</h2>
               <p>
-                Changing your password ends every active session. Use 14–72
-                bytes.
+                Changing your password ends all of your active sessions. Use
+                14–72 bytes.
               </p>
             </div>
             <form

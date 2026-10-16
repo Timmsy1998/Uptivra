@@ -7,10 +7,13 @@ import (
 	"strings"
 )
 
-type Config struct{ DatabaseURL, EncryptionKey, CronSecret, Origin, Port string }
+type Config struct{ DatabaseURL, EncryptionKey, CronSecret, Origin, Port, SetupCode string }
 
 func Load() (Config, error) {
-	c := Config{DatabaseURL: os.Getenv("DATABASE_URL"), EncryptionKey: os.Getenv("ENCRYPTION_KEY"), CronSecret: os.Getenv("CRON_SECRET"), Origin: strings.TrimSuffix(os.Getenv("APP_ORIGIN"), "/"), Port: os.Getenv("PORT")}
+	c := Config{DatabaseURL: os.Getenv("DATABASE_URL"), EncryptionKey: os.Getenv("ENCRYPTION_KEY"), CronSecret: os.Getenv("CRON_SECRET"), Origin: strings.TrimSuffix(os.Getenv("APP_ORIGIN"), "/"), Port: os.Getenv("PORT"), SetupCode: os.Getenv("SETUP_CODE")}
+	if c.SetupCode != "" && (len(c.SetupCode) != 4 || strings.Trim(c.SetupCode, "0123456789") != "") {
+		return c, errors.New("SETUP_CODE must contain exactly four digits")
+	}
 	if c.Port == "" {
 		c.Port = "8080"
 	}

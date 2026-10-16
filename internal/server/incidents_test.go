@@ -42,6 +42,9 @@ func TestIncidentUpdatePermissionsAndPublicProjection(t *testing.T) {
 		return w
 	}
 	good := `{"status":"identified","message":"Fix deployed"}`
+	if err = s.Bootstrap(ctx, "admin@example.com", "test-password-very-long"); err != nil {
+		t.Fatal(err)
+	}
 	// A durable valid browser session still cannot bypass origin validation.
 	if _, err = s.DB.Exec(ctx, `INSERT INTO sessions(token_hash,expires_at) VALUES($1,now()+interval '1 hour')`, cryptobox.Hash("test-session")); err != nil {
 		t.Fatal(err)

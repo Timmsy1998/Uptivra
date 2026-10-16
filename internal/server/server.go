@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,9 +38,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/cron", s.cron)
 	mux.HandleFunc("GET /api/v1/public/status", s.public)
 	mux.HandleFunc("GET /api/v1/public/badge.svg", s.badge)
+	mux.HandleFunc("GET /api/v1/auth/setup", s.setupStatus)
+	mux.HandleFunc("POST /api/v1/auth/setup", s.setup)
+	mux.Handle("GET /api/v1/admins", s.auth(true, s.admins))
+	mux.Handle("POST /api/v1/admins", s.auth(true, s.createAdmin))
+	mux.Handle("DELETE /api/v1/admins/{id}", s.auth(true, s.deleteAdmin))
+	mux.Handle("POST /api/v1/admins/{id}/ownership", s.auth(true, s.transferOwner))
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	mux.Handle("GET /api/v1/auth/session", s.auth(true, func(w http.ResponseWriter, r *http.Request) {
-		respond(w, 200, map[string]string{"role": "administrator"})
+		a, e := s.Store.SessionAdmin(r.Context(), sessionToken(r))
+		if dbError(w, e) {
+			return
+		}
+		respond(w, 200, struct {
+			store.Admin
+			Role string `json:"role"`
+		}{a, "administrator"})
 	}))
 	mux.Handle("POST /api/v1/auth/logout", s.auth(true, s.logout))
 	mux.Handle("PUT /api/v1/account/password", s.auth(true, s.password))
@@ -207,7 +221,11 @@ func (s *Server) password(w http.ResponseWriter, r *http.Request) {
 		problem(w, 429, "too many attempts")
 		return
 	}
-	if e := s.Store.ChangePassword(r.Context(), v.Current, v.Next); e != nil {
+	a, err := s.Store.SessionAdmin(r.Context(), sessionToken(r))
+	if dbError(w, err) {
+		return
+	}
+	if e := s.Store.ChangeAdminPassword(r.Context(), a.ID, v.Current, v.Next); e != nil {
 		problem(w, 400, "current password incorrect or new password outside 14–72 bytes")
 		return
 	}
@@ -402,3 +420,94 @@ func (s *Server) heartbeat(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, 204, nil)
 }
+
+func (s *Server) setupStatus(w http.ResponseWriter, r *http.Request) {
+	required, err := s.Store.SetupRequired(r.Context())
+	if dbError(w, err) {
+		return
+	}
+	respond(w, 200, map[string]bool{"required": required, "enabled": required && s.Config.SetupCode != ""})
+}
+func (s *Server) setup(w http.ResponseWriter, r *http.Request) {
+	if !s.origin(w, r) {
+		return
+	}
+	if !s.Store.RateLimit(r.Context(), "setup:global", 5) {
+		problem(w, 429, "too many setup attempts; try again in 15 minutes")
+		return
+	}
+	var v struct {
+		Code     string `json:"code"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &v) {
+		return
+	}
+	if s.Config.SetupCode == "" || len(v.Code) != 4 || subtle.ConstantTimeCompare([]byte(v.Code), []byte(s.Config.SetupCode)) != 1 {
+		problem(w, 403, "setup code rejected")
+		return
+	}
+	if err := s.Store.Bootstrap(r.Context(), v.Email, v.Password); err != nil {
+		problem(w, 400, "setup unavailable or invalid email/password (14–72 bytes)")
+		return
+	}
+	respond(w, 201, map[string]string{"status": "created"})
+}
+func (s *Server) admins(w http.ResponseWriter, r *http.Request) {
+	v, e := s.Store.Admins(r.Context())
+	if dbError(w, e) {
+		return
+	}
+	respond(w, 200, v)
+}
+func adminError(w http.ResponseWriter, e error) bool {
+	if errors.Is(e, store.ErrAdminAccess) {
+		problem(w, 403, e.Error())
+		return true
+	}
+	return dbError(w, e)
+}
+func (s *Server) createAdmin(w http.ResponseWriter, r *http.Request) {
+	a, e := s.Store.SessionAdmin(r.Context(), sessionToken(r))
+	if dbError(w, e) {
+		return
+	}
+	if !a.Owner {
+		problem(w, 403, "owner access required")
+		return
+	}
+	if !s.Store.RateLimit(r.Context(), "admin:create", 20) {
+		problem(w, 429, "too many attempts")
+		return
+	}
+	var v struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &v) {
+		return
+	}
+	if e = s.Store.CreateAdmin(r.Context(), sessionToken(r), v.Email, v.Password); e != nil {
+		if errors.Is(e, store.ErrAdminAccess) {
+			adminError(w, e)
+		} else {
+			problem(w, 400, "valid unique email and password of 14–72 bytes required (maximum 100 admins)")
+		}
+		return
+	}
+	respond(w, 201, map[string]string{"status": "created"})
+}
+func (s *Server) manageAdmin(w http.ResponseWriter, r *http.Request, transfer bool) {
+	id, e := strconv.Atoi(r.PathValue("id"))
+	if e != nil || id < 1 {
+		problem(w, 400, "invalid administrator id")
+		return
+	}
+	if adminError(w, s.Store.ManageAdmin(r.Context(), sessionToken(r), id, transfer)) {
+		return
+	}
+	respond(w, 204, nil)
+}
+func (s *Server) deleteAdmin(w http.ResponseWriter, r *http.Request)   { s.manageAdmin(w, r, false) }
+func (s *Server) transferOwner(w http.ResponseWriter, r *http.Request) { s.manageAdmin(w, r, true) }

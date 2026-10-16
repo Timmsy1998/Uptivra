@@ -1,0 +1,11 @@
+ALTER TABLE accounts DROP CONSTRAINT accounts_id_check;
+CREATE SEQUENCE account_ids START 2;
+ALTER TABLE accounts ALTER COLUMN id SET DEFAULT nextval('account_ids');
+ALTER SEQUENCE account_ids OWNED BY accounts.id;
+ALTER TABLE accounts ADD COLUMN owner boolean NOT NULL DEFAULT false;
+UPDATE accounts SET owner=true WHERE id=1;
+CREATE UNIQUE INDEX accounts_one_owner ON accounts(owner) WHERE owner;
+CREATE UNIQUE INDEX accounts_email ON accounts(lower(email));
+ALTER TABLE sessions ADD COLUMN account_id integer NOT NULL DEFAULT 1 REFERENCES accounts(id) ON DELETE CASCADE;
+CREATE INDEX sessions_account ON sessions(account_id);
+INSERT INTO schema_versions(version) VALUES(5);

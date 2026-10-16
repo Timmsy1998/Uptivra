@@ -41,3 +41,9 @@ CI checks Go formatting, vet/race tests with PostgreSQL, reachable Go vulnerabil
 Tests cover address bypasses, rebinding-style resolution, redirects, timeouts, encryption tampering, auth/CSRF/scopes, concurrent password changes and logins, secret redaction, stale claims and duplicate completion. Remote provider controls and infrastructure isolation need deployment acceptance checks. Report suspected vulnerabilities through [SECURITY.md](../SECURITY.md).
 
 Heartbeat tokens authorize only receipt for one enabled monitor. Session-only, origin-validated rotation returns plaintext once and stores a hash. Receipts serialize with result recording, edits and deletion; rotation is rechecked when updating the heartbeat row. A stolen token can falsify that monitor’s health until rotated. Receipt requests have a ten-second database deadline; edge rate limiting remains an operator responsibility. See [heartbeat setup](heartbeats.md).
+
+## Initial setup and administrator ownership
+
+Browser setup is disabled unless `SETUP_CODE` contains exactly four ASCII digits. It requires the configured Origin, a durable global five-attempt/15-minute limit and an empty account table. Creation is serialized with CLI bootstrap. A four-digit code has limited entropy; deploy on a trusted network, complete setup promptly and remove the code afterward. The global throttle can delay legitimate setup after malicious attempts.
+
+Sessions reference individual accounts and cascade on account deletion. Password changes revoke only the affected account’s sessions. Administrator creation, deletion and ownership transfer require a live owner session, rechecked under a transaction lock. The current owner cannot be deleted or delete themselves; ownership transfer is atomic and retains exactly one owner. Ordinary administrators retain full monitoring/configuration access, including outbound channel configuration; grant this role only to trusted operators.

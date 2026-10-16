@@ -118,3 +118,9 @@ Database tests skip if `TEST_DATABASE_URL` is missing. They create isolated sche
 Licensed under [Apache-2.0](LICENSE). Maintained by [timmsy1998](https://github.com/timmsy1998).
 
 Monitor services without a public endpoint using [outbound heartbeats](docs/heartbeats.md), including Discord bots.
+
+### Administrator setup and ownership
+
+For browser setup, set `SETUP_CODE` to exactly four digits in the backend environment, apply migrations and open the login page. Enter that code, an email and a password of 14–72 bytes to create the owner. Alternatively, use the CLI bootstrap above. Setup closes permanently while any account exists; remove `SETUP_CODE` after use. Five setup attempts per 15 minutes are allowed globally, so provision promptly on a trusted network.
+
+The owner can create administrators, delete other administrators and transfer ownership under Settings. All administrators can operate monitoring and change their own password. Only the current owner can manage administrator accounts; the current owner cannot be deleted. Transferring ownership makes the previous owner an ordinary administrator, who can then be removed by the new owner. Account deletion and password changes revoke that account’s sessions.
