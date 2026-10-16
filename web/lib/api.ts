@@ -74,7 +74,18 @@ export type PublicMonitor = Pick<
   | "last_check"
   | "samples"
 >;
+export type MaintenanceWindow = {
+  id: string;
+  monitor_id: string;
+  monitor_name: string;
+  title: string;
+  description: string;
+  starts_at: string;
+  ends_at: string;
+  weekly: boolean;
+};
 export type PublicStatus = {
+  maintenance?: MaintenanceWindow[];
   title: string;
   description: string;
   status: string;

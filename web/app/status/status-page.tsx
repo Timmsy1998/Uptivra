@@ -133,6 +133,36 @@ export default function StatusPage() {
               maintenance are unmeasured time; stale services are shown as
               unknown.
             </p>
+            <section className="panel">
+              <div className="section-heading">
+                <h2>Upcoming maintenance</h2>
+                <span className="label">Next 30 days</span>
+              </div>
+              {data.maintenance?.length ? (
+                <div className="simple-list">
+                  {data.maintenance.map((w) => (
+                    <div key={w.id}>
+                      <div>
+                        <h3>{w.title}</h3>
+                        <p>
+                          {w.monitor_name} · {date(w.starts_at)} —{" "}
+                          {date(w.ends_at)}
+                          {w.weekly ? " · Weekly in UTC" : ""}
+                        </p>
+                        <p>{w.description}</p>
+                        <small>
+                          {Date.parse(w.starts_at) <= Date.now()
+                            ? "In progress"
+                            : "Scheduled"}
+                        </small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p>No upcoming maintenance announced.</p>
+              )}
+            </section>
             <section className="public-history">
               <div className="section-heading">
                 <h2>Incident history</h2>

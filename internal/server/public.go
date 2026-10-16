@@ -19,12 +19,13 @@ type PublicMonitor struct {
 	Samples   int        `json:"samples"`
 }
 type PublicStatus struct {
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	Status      string            `json:"status"`
-	UpdatedAt   time.Time         `json:"updated_at"`
-	Monitors    []PublicMonitor   `json:"monitors"`
-	Incidents   []domain.Incident `json:"incidents"`
+	Maintenance []domain.Maintenance `json:"maintenance"`
+	Title       string               `json:"title"`
+	Description string               `json:"description"`
+	Status      string               `json:"status"`
+	UpdatedAt   time.Time            `json:"updated_at"`
+	Monitors    []PublicMonitor      `json:"monitors"`
+	Incidents   []domain.Incident    `json:"incidents"`
 }
 
 func (s *Server) public(w http.ResponseWriter, r *http.Request) {
@@ -41,6 +42,10 @@ func (s *Server) public(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := PublicStatus{Title: settings.Title, Description: settings.Description, Status: "unknown", UpdatedAt: time.Now().UTC(), Monitors: []PublicMonitor{}, Incidents: inc}
+	out.Maintenance, e = s.Store.Maintenance(r.Context(), true)
+	if dbError(w, e) {
+		return
+	}
 	rank := map[string]int{"healthy": 0, "paused": 1, "maintenance": 2, "unknown": 3, "degraded": 4, "down": 5}
 	worst := -1
 	for _, m := range ms {

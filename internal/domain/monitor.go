@@ -10,33 +10,34 @@ import (
 )
 
 type Monitor struct {
-	Type              string            `json:"type,omitempty"`
-	Grace             int               `json:"grace_seconds,omitempty"`
-	ID                string            `json:"id"`
-	Name              string            `json:"name"`
-	Description       string            `json:"description"`
-	Group             string            `json:"group"`
-	URL               string            `json:"url"`
-	Interval          int               `json:"interval_seconds"`
-	Timeout           int               `json:"timeout_seconds"`
-	ExpectedStatus    int               `json:"expected_status"`
-	Contains          string            `json:"contains"`
-	Headers           map[string]string `json:"headers,omitempty"`
-	FailureThreshold  int               `json:"failure_threshold"`
-	RecoveryThreshold int               `json:"recovery_threshold"`
-	Enabled           bool              `json:"enabled"`
-	Public            bool              `json:"public"`
-	Authorized        bool              `json:"authorized"`
-	MaintenanceUntil  *time.Time        `json:"maintenance_until"`
-	Status            string            `json:"status"`
-	LastCheck         *time.Time        `json:"last_check"`
-	Failures          int               `json:"-"`
-	Successes         int               `json:"-"`
-	Lease             string            `json:"-"`
-	Uptime            *float64          `json:"uptime"`
-	Latency           *float64          `json:"latency_ms"`
-	P95               *float64          `json:"p95_ms"`
-	Samples           int               `json:"samples"`
+	Type                      string            `json:"type,omitempty"`
+	Grace                     int               `json:"grace_seconds,omitempty"`
+	ID                        string            `json:"id"`
+	Name                      string            `json:"name"`
+	Description               string            `json:"description"`
+	Group                     string            `json:"group"`
+	URL                       string            `json:"url"`
+	Interval                  int               `json:"interval_seconds"`
+	Timeout                   int               `json:"timeout_seconds"`
+	ExpectedStatus            int               `json:"expected_status"`
+	Contains                  string            `json:"contains"`
+	Headers                   map[string]string `json:"headers,omitempty"`
+	FailureThreshold          int               `json:"failure_threshold"`
+	RecoveryThreshold         int               `json:"recovery_threshold"`
+	Enabled                   bool              `json:"enabled"`
+	Public                    bool              `json:"public"`
+	Authorized                bool              `json:"authorized"`
+	ScheduledMaintenanceUntil *time.Time        `json:"scheduled_maintenance_until"`
+	MaintenanceUntil          *time.Time        `json:"maintenance_until"`
+	Status                    string            `json:"status"`
+	LastCheck                 *time.Time        `json:"last_check"`
+	Failures                  int               `json:"-"`
+	Successes                 int               `json:"-"`
+	Lease                     string            `json:"-"`
+	Uptime                    *float64          `json:"uptime"`
+	Latency                   *float64          `json:"latency_ms"`
+	P95                       *float64          `json:"p95_ms"`
+	Samples                   int               `json:"samples"`
 }
 
 func (m Monitor) Validate() error {
@@ -91,7 +92,7 @@ func (m Monitor) Health(now time.Time) string {
 	if !m.Enabled {
 		return "paused"
 	}
-	if m.MaintenanceUntil != nil && m.MaintenanceUntil.After(now) {
+	if (m.MaintenanceUntil != nil && m.MaintenanceUntil.After(now)) || (m.ScheduledMaintenanceUntil != nil && m.ScheduledMaintenanceUntil.After(now)) {
 		return "maintenance"
 	}
 	if m.LastCheck == nil || now.Sub(*m.LastCheck) > time.Duration(m.Interval*2+30)*time.Second {

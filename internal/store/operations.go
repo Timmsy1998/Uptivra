@@ -98,7 +98,7 @@ func (s *Store) SchedulerHealth(ctx context.Context) (SchedulerHealth, error) {
 	if e == nil {
 		h.LastRun = &run
 	}
-	e = s.DB.QueryRow(ctx, `SELECT count(*) FROM monitors WHERE enabled AND next_check<now()-interval '90 seconds' AND (maintenance_until IS NULL OR maintenance_until<=now())`).Scan(&h.Overdue)
+	e = s.DB.QueryRow(ctx, `SELECT count(*) FROM monitors WHERE enabled AND next_check<now()-interval '90 seconds' AND (maintenance_until IS NULL OR maintenance_until<=now()) AND active_maintenance_end(id,now()) IS NULL`).Scan(&h.Overdue)
 	if e != nil {
 		return h, e
 	}

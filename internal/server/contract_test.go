@@ -51,7 +51,7 @@ func TestOpenAPIContract(t *testing.T) {
 			t.Errorf("undocumented route %s %s", route[1], route[2])
 		}
 	}
-	responses := map[string]any{"Monitor": domain.Monitor{}, "Check": domain.Check{}, "Incident": domain.Incident{}, "IncidentUpdate": domain.IncidentUpdate{}, "Settings": domain.Settings{}, "PublicMonitor": server.PublicMonitor{}, "PublicStatus": server.PublicStatus{}, "Key": store.Key{}, "DeliveryStatus": store.DeliveryStatus{}, "SchedulerRun": store.SchedulerRun{}, "SchedulerHealth": store.SchedulerHealth{}}
+	responses := map[string]any{"Maintenance": domain.Maintenance{}, "Monitor": domain.Monitor{}, "Check": domain.Check{}, "Incident": domain.Incident{}, "IncidentUpdate": domain.IncidentUpdate{}, "Settings": domain.Settings{}, "PublicMonitor": server.PublicMonitor{}, "PublicStatus": server.PublicStatus{}, "Key": store.Key{}, "DeliveryStatus": store.DeliveryStatus{}, "SchedulerRun": store.SchedulerRun{}, "SchedulerHealth": store.SchedulerHealth{}}
 	for name, value := range responses {
 		properties := spec.Components.Schemas[name].Properties
 		typ := reflect.TypeOf(value)

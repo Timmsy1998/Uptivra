@@ -40,9 +40,16 @@ import MonitorDetail from "./monitor-detail";
 import SettingsPanel from "./settings";
 import Channels from "./channels";
 import Operations from "./operations";
+import Maintenance from "./maintenance";
 import Login from "./login";
 import DemoBanner from "./demo-banner";
-type View = "monitors" | "incidents" | "channels" | "operations" | "settings";
+type View =
+  | "monitors"
+  | "incidents"
+  | "channels"
+  | "operations"
+  | "maintenance"
+  | "settings";
 export default function Dashboard() {
   const [auth, setAuth] = useState<boolean | null>(null);
   const [view, setView] = useState<View>("monitors");
@@ -136,6 +143,7 @@ export default function Dashboard() {
     { id: "monitors", label: "Monitors", icon: LayoutList },
     { id: "incidents", label: "Incidents", icon: Clock3 },
     { id: "channels", label: "Channels", icon: Webhook },
+    { id: "maintenance", label: "Maintenance", icon: Clock3 },
     { id: "operations", label: "Delivery & scheduler", icon: Activity },
     { id: "settings", label: "Settings & access", icon: Settings2 },
   ] as const;
@@ -561,6 +569,7 @@ export default function Dashboard() {
           )}
           {view === "channels" && <Channels />}
           {view === "operations" && <Operations />}
+          {view === "maintenance" && <Maintenance />}
           {view === "settings" && (
             <SettingsPanel onLogout={() => setAuth(false)} />
           )}

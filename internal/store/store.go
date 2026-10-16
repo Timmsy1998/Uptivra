@@ -34,6 +34,9 @@ var adminsMigration string
 //go:embed migrations/006_operations.sql
 var operationsMigration string
 
+//go:embed migrations/007_maintenance.sql
+var maintenanceMigration string
+
 type Store struct {
 	DB  *pgxpool.Pool
 	Box *cryptobox.Box
@@ -74,7 +77,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	for _, migration := range []struct {
 		version int
 		sql     string
-	}{{2, heartbeatMigration}, {3, channelGroupsMigration}, {4, incidentUpdatesMigration}, {5, adminsMigration}, {6, operationsMigration}} {
+	}{{2, heartbeatMigration}, {3, channelGroupsMigration}, {4, incidentUpdatesMigration}, {5, adminsMigration}, {6, operationsMigration}, {7, maintenanceMigration}} {
 		var applied bool
 		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_versions WHERE version=$1)`, migration.version).Scan(&applied); e != nil {
 			return e
@@ -92,7 +95,7 @@ const monitorColumns = `m.id,m.config,m.secrets,m.enabled,m.public,m.interval_se
  (SELECT 100.0*count(*) FILTER(WHERE ok)/NULLIF(count(*),0) FROM checks WHERE monitor_id=m.id AND checked_at>now()-interval '24 hours'),
  (SELECT avg(latency_ms) FROM checks WHERE monitor_id=m.id AND checked_at>now()-interval '24 hours'),
  (SELECT percentile_cont(0.95) WITHIN GROUP(ORDER BY latency_ms) FROM checks WHERE monitor_id=m.id AND checked_at>now()-interval '24 hours'),
- (SELECT count(*) FROM checks WHERE monitor_id=m.id AND checked_at>now()-interval '24 hours')`
+ (SELECT count(*) FROM checks WHERE monitor_id=m.id AND checked_at>now()-interval '24 hours'),active_maintenance_end(m.id,now())`
 
 type scanner interface{ Scan(...any) error }
 
@@ -102,11 +105,11 @@ func (s *Store) scan(row scanner) (domain.Monitor, error) {
 	var sec string
 	var enabled, public bool
 	var interval int
-	var maintenance, last *time.Time
+	var maintenance, last, scheduled *time.Time
 	var status, lease, id string
 	var failures, successes, samples int
 	var uptime, latency, p95 *float64
-	e := row.Scan(&id, &config, &sec, &enabled, &public, &interval, &maintenance, &status, &failures, &successes, &last, &lease, &uptime, &latency, &p95, &samples)
+	e := row.Scan(&id, &config, &sec, &enabled, &public, &interval, &maintenance, &status, &failures, &successes, &last, &lease, &uptime, &latency, &p95, &samples, &scheduled)
 	if e != nil {
 		return m, e
 	}
@@ -125,6 +128,7 @@ func (s *Store) scan(row scanner) (domain.Monitor, error) {
 	m.Public = public
 	m.Interval = interval
 	m.MaintenanceUntil = maintenance
+	m.ScheduledMaintenanceUntil = scheduled
 	m.Status = status
 	m.Failures = failures
 	m.Successes = successes
@@ -169,6 +173,7 @@ func (s *Store) SaveMonitor(ctx context.Context, m domain.Monitor, create bool) 
 		return e
 	}
 	m.Headers = nil
+	m.ScheduledMaintenanceUntil = nil
 	m.Status = ""
 	m.LastCheck = nil
 	m.Uptime = nil
@@ -260,7 +265,7 @@ func (s *Store) SaveSettings(ctx context.Context, v domain.Settings) error {
 }
 func (s *Store) Claim(ctx context.Context) ([]domain.Monitor, error) {
 	token := cryptobox.Token()
-	rows, e := s.DB.Query(ctx, `WITH due AS (SELECT id FROM monitors WHERE enabled AND next_check<=now() AND (maintenance_until IS NULL OR maintenance_until<=now()) AND (lease_until IS NULL OR lease_until<now()) ORDER BY next_check LIMIT 32 FOR UPDATE SKIP LOCKED) UPDATE monitors m SET lease_token=$1,lease_until=now()+interval '90 seconds' FROM due WHERE m.id=due.id RETURNING m.id`, token)
+	rows, e := s.DB.Query(ctx, `WITH due AS (SELECT id FROM monitors WHERE enabled AND next_check<=now() AND (maintenance_until IS NULL OR maintenance_until<=now()) AND active_maintenance_end(id,now()) IS NULL AND (lease_until IS NULL OR lease_until<now()) ORDER BY next_check LIMIT 32 FOR UPDATE SKIP LOCKED) UPDATE monitors m SET lease_token=$1,lease_until=now()+interval '90 seconds' FROM due WHERE m.id=due.id RETURNING m.id`, token)
 	if e != nil {
 		return nil, e
 	}
@@ -307,6 +312,13 @@ func (s *Store) Record(ctx context.Context, m domain.Monitor, c domain.Check) er
 	}
 	if e != nil {
 		return e
+	}
+	var maintenance bool
+	if e = tx.QueryRow(ctx, `SELECT COALESCE(maintenance_until>clock_timestamp(),false) OR active_maintenance_end(id,clock_timestamp()) IS NOT NULL FROM monitors WHERE id=$1`, m.ID).Scan(&maintenance); e != nil {
+		return e
+	}
+	if maintenance {
+		return nil
 	}
 	if m.Type == "heartbeat" {
 		// Receipt takes the same monitor-row lock, so freshness is evaluated
