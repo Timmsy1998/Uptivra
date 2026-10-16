@@ -128,3 +128,31 @@ export const ms = (v: number | null) =>
   v === null ? "—" : Math.round(v) + " ms";
 export const date = (v: string | null) =>
   v ? new Date(v).toLocaleString() : "No checks yet";
+
+export type DailyAvailability = {
+  date: string;
+  period_seconds: number;
+  covered_seconds: number;
+  up_seconds: number;
+  missing_seconds: number;
+  uptime: number | null;
+};
+export type Availability = {
+  monitor_id: string;
+  days: number;
+  from: string;
+  to: string;
+  retention_days: number;
+  period_seconds: number;
+  covered_seconds: number;
+  up_seconds: number;
+  missing_seconds: number;
+  uptime: number | null;
+  daily: DailyAvailability[];
+  incidents: {
+    id: string;
+    opened_at: string;
+    resolved_at: string | null;
+    duration_seconds: number;
+  }[];
+};

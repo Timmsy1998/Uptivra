@@ -1,4 +1,5 @@
 "use client";
+import HistoryPanel from "./history-panel";
 import { demoMode } from "@/lib/demo-mode";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Settings2 } from "lucide-react";
@@ -262,6 +263,7 @@ export default function MonitorDetail({
           </table>
         </div>
       </section>
+      <HistoryPanel key={monitor.id} monitorId={monitor.id} />
     </>
   );
 }

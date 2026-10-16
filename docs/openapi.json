@@ -3725,6 +3725,219 @@
           }
         ]
       }
+    },
+    "/api/v1/monitors/{id}/availability": {
+      "get": {
+        "summary": "Read measured availability and missing coverage",
+        "operationId": "get__api_v1_monitors_id_availability",
+        "description": "UTC calendar days including today. Samples establish coverage for at most their recorded cadence. Legacy samples without cadence establish no coverage. Latest 100 overlapping incident durations are returned. Read API keys are also accepted on the authenticated route.",
+        "security": [
+          {
+            "session": []
+          },
+          {
+            "apiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Availability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                7,
+                30,
+                90
+              ],
+              "default": 30
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/public/monitors/{id}/availability": {
+      "get": {
+        "summary": "Read measured availability and missing coverage",
+        "operationId": "get__api_v1_public_monitors_id_availability",
+        "description": "UTC calendar days including today. Samples establish coverage for at most their recorded cadence. Legacy samples without cadence establish no coverage. Latest 100 overlapping incident durations are returned. Read API keys are also accepted on the authenticated route.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Availability"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Request rejected or unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "days",
+            "schema": {
+              "type": "integer",
+              "enum": [
+                7,
+                30,
+                90
+              ],
+              "default": 30
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -4966,6 +5179,154 @@
           "starts_at",
           "ends_at",
           "weekly"
+        ]
+      },
+      "DailyAvailability": {
+        "type": "object",
+        "properties": {
+          "period_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "covered_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "up_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "missing_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "uptime": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          }
+        },
+        "required": [
+          "period_seconds",
+          "covered_seconds",
+          "up_seconds",
+          "missing_seconds",
+          "date",
+          "uptime"
+        ]
+      },
+      "IncidentDuration": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "opened_at",
+          "resolved_at",
+          "duration_seconds"
+        ]
+      },
+      "Availability": {
+        "type": "object",
+        "properties": {
+          "period_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "covered_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "up_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "missing_seconds": {
+            "type": "number",
+            "minimum": 0
+          },
+          "uptime": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "monitor_id": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "enum": [
+              7,
+              30,
+              90
+            ]
+          },
+          "retention_days": {
+            "type": "integer"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DailyAvailability"
+            }
+          },
+          "incidents": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/IncidentDuration"
+            }
+          }
+        },
+        "required": [
+          "period_seconds",
+          "covered_seconds",
+          "up_seconds",
+          "missing_seconds",
+          "uptime",
+          "monitor_id",
+          "days",
+          "retention_days",
+          "from",
+          "to",
+          "daily",
+          "incidents"
         ]
       }
     }

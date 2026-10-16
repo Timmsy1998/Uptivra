@@ -32,7 +32,7 @@ Below the consecutive failure threshold a failing service is degraded. At the th
 
 Paused and maintenance states override observed health. With no result, or a result older than `2 × interval + 30 seconds`, health is unknown. Open incidents remain visible even when checks become stale. The public aggregate selects the worst published state: down, degraded, unknown, maintenance, paused, healthy; an empty page is unknown.
 
-Statistics use recorded samples in the previous 24 hours. Uptime is successful samples divided by all samples; mean/p95 latency includes failed samples. Missing observations, pauses and maintenance have no fabricated measurements. This is neither time-weighted uptime nor a contractual SLA calculation.
+The 24-hour summary statistics use recorded samples in the previous 24 hours. Uptime is successful samples divided by all samples; mean/p95 latency includes failed samples. Missing observations, pauses and maintenance have no fabricated measurements. This is neither time-weighted uptime nor a contractual SLA calculation.
 
 ## Capacity and retention
 
@@ -55,3 +55,5 @@ Native/container deployments use `serve` and `schedule`, or an external minute s
 Migration 2 adds per-monitor hashed tokens and the last receipt timestamp. Receipt and recording lock the monitor row in the same order. Scheduled freshness evaluations use the database timestamp and enter the same fenced result/incident/outbox transaction as HTTP checks. Type is immutable; legacy monitors with no type remain HTTP. Receipts create no history; the scheduler records bounded observations. Heartbeat latency aggregates are null. See [setup and threat boundaries](heartbeats.md).
 
 Notification destinations store an optional exact monitor group separately from their encrypted delivery configuration. Incident transactions enqueue only matching destinations: SQL NULL selects all groups, an empty string selects ungrouped monitors. Routing edits affect future enqueue operations and preserve existing outbox records and retry behavior. Migration 003 adds this nullable field, retaining all-group routing for existing channels.
+
+The 7/30/90-day availability API uses UTC calendar days including a partial current day. Migration 008 stores each check's original cadence. A check contributes up/down coverage until the earlier of the next check, its cadence deadline or the view end. Longer gaps and legacy samples without cadence remain missing coverage. Daily bars and period totals use elapsed seconds; availability divides measured up seconds by measured covered seconds, excluding missing coverage. Retention still limits available evidence. Reads are bounded to 150,000 samples and 100 overlapping incidents; incident durations span their complete lifetime through resolution or the view timestamp.

@@ -37,6 +37,9 @@ var operationsMigration string
 //go:embed migrations/007_maintenance.sql
 var maintenanceMigration string
 
+//go:embed migrations/008_availability.sql
+var availabilityMigration string
+
 type Store struct {
 	DB  *pgxpool.Pool
 	Box *cryptobox.Box
@@ -77,7 +80,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 	for _, migration := range []struct {
 		version int
 		sql     string
-	}{{2, heartbeatMigration}, {3, channelGroupsMigration}, {4, incidentUpdatesMigration}, {5, adminsMigration}, {6, operationsMigration}, {7, maintenanceMigration}} {
+	}{{2, heartbeatMigration}, {3, channelGroupsMigration}, {4, incidentUpdatesMigration}, {5, adminsMigration}, {6, operationsMigration}, {7, maintenanceMigration}, {8, availabilityMigration}} {
 		var applied bool
 		if e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM schema_versions WHERE version=$1)`, migration.version).Scan(&applied); e != nil {
 			return e
@@ -335,7 +338,7 @@ func (s *Store) Record(ctx context.Context, m domain.Monitor, c domain.Check) er
 		}
 	}
 	status, f, r, event := domain.Transition(status, f, r, c.OK, m.FailureThreshold, m.RecoveryThreshold)
-	_, e = tx.Exec(ctx, `INSERT INTO checks(monitor_id,checked_at,ok,latency_ms,status_code,reason) VALUES($1,$2,$3,$4,$5,$6)`, m.ID, c.At, c.OK, c.Latency, c.Code, c.Reason)
+	_, e = tx.Exec(ctx, `INSERT INTO checks(monitor_id,checked_at,ok,latency_ms,status_code,reason,interval_seconds) VALUES($1,$2,$3,$4,$5,$6,$7)`, m.ID, c.At, c.OK, c.Latency, c.Code, c.Reason, m.Interval)
 	if e != nil {
 		return e
 	}

@@ -10,6 +10,7 @@ Choose one scheduler: Vercel cron, `uptivra schedule`, or an external minute job
 | `ENCRYPTION_KEY` | Go processes/function | Base64 encoding of exactly 32 random bytes: `openssl rand -base64 32` |
 | `CRON_SECRET` | Go processes/function | At least 32 bytes; generate independently with `openssl rand -hex 32` |
 | `APP_ORIGIN` | Go processes/function | Exact browser origin, e.g. `https://status.example.com`; no path, query or fragment. HTTP is accepted only for localhost development |
+| `SETUP_CODE` | Go processes/function, optional | Exactly four ASCII digits to enable first-owner browser setup; remove after provisioning. Disabled when omitted |
 | `PORT` | Native Go server | Default `8080` |
 | `NEXT_PUBLIC_DEMO_MODE` | Next.js build | Set exactly `true` for the temporary browser demo; unset for normal authenticated operation. Rebuild when changing |
 | `API_ORIGIN` | Next.js server | Fixed Go backend origin; never a `NEXT_PUBLIC_` variable |
@@ -175,3 +176,26 @@ sudo journalctl -u uptivra-scheduler -n 100
 ```
 
 The native API listens on all interfaces at its configured port. Restrict port 8080 with the host firewall; publish only the TLS reverse proxy and keep PostgreSQL private. The frontend unit binds loopback. These units are installation examples, not remotely tested provisioning automation. Backups and external coverage monitoring remain your responsibility.
+
+## Applying migrations to Vercel PostgreSQL
+
+Vercel deployments do not run database migrations automatically. From a trusted local checkout of the version being deployed, run the migration CLI against the same database and branch used by the production Go project. Back up first and pause application writes and cron during the upgrade. For Neon, use the direct connection URL to that branch and database, with the provider-required TLS settings.
+
+In Bash, read the existing production values without saving them in shell history:
+
+```bash
+read -r -s -p 'Production database URL: ' DATABASE_URL
+printf '\n'
+read -r -s -p 'Existing encryption key: ' ENCRYPTION_KEY
+printf '\n'
+read -r -s -p 'Existing cron secret: ' CRON_SECRET
+printf '\n'
+read -r -p 'Frontend HTTPS origin: ' APP_ORIGIN
+export DATABASE_URL ENCRYPTION_KEY CRON_SECRET APP_ORIGIN
+go run ./cmd/uptivra migrate
+unset DATABASE_URL ENCRYPTION_KEY CRON_SECRET APP_ORIGIN
+```
+
+Use the existing encryption key and cron secret, not newly generated values. The CLI requires valid backend configuration even for migrations. Applied migrations are skipped; a failed command exits unsuccessfully. After success, deploy the matching backend and frontend, then resume writes and cron. Check readiness, sign-in and scheduler health. These instructions describe the workflow; a remote Vercel migration was not performed here.
+
+For initial browser provisioning, configure `SETUP_CODE` in the backend Vercel environment before deploying. It must be exactly four digits. Apply migrations, deploy, create the first owner on the login page, then remove the code and redeploy. Existing installations preserve their administrator as owner. Migration 008 records cadence on future checks; it does not backfill unknown historical coverage.

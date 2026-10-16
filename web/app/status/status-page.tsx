@@ -11,6 +11,7 @@ import {
   ErrorMessage,
   Empty,
 } from "@/components/shared";
+import HistoryPanel from "@/components/history-panel";
 import DemoBanner from "@/components/demo-banner";
 const summary: Record<string, string> = {
   healthy: "All services operational",
@@ -22,6 +23,7 @@ const summary: Record<string, string> = {
 };
 export default function StatusPage() {
   const [data, setData] = useState<PublicStatus | null>(null);
+  const [historyMonitor, setHistoryMonitor] = useState("");
   const [error, setError] = useState("");
   useEffect(() => {
     let alive = true;
@@ -163,6 +165,35 @@ export default function StatusPage() {
                 <p>No upcoming maintenance announced.</p>
               )}
             </section>
+            {!!data.monitors.length && (
+              <>
+                <label htmlFor="public-history-monitor">Service history</label>
+                <select
+                  id="public-history-monitor"
+                  value={
+                    data.monitors.some((m) => m.id === historyMonitor)
+                      ? historyMonitor
+                      : data.monitors[0].id
+                  }
+                  onChange={(e) => setHistoryMonitor(e.target.value)}
+                >
+                  {data.monitors.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+                <HistoryPanel
+                  key={historyMonitor}
+                  monitorId={
+                    data.monitors.some((m) => m.id === historyMonitor)
+                      ? historyMonitor
+                      : data.monitors[0].id
+                  }
+                  publicView
+                />
+              </>
+            )}
             <section className="public-history">
               <div className="section-heading">
                 <h2>Incident history</h2>

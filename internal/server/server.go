@@ -37,6 +37,8 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /api/cron", s.cron)
 	mux.HandleFunc("GET /api/v1/public/status", s.public)
+	mux.HandleFunc("GET /api/v1/public/monitors/{id}/availability", s.publicAvailability)
+	mux.Handle("GET /api/v1/monitors/{id}/availability", s.auth(false, s.availability))
 	mux.HandleFunc("GET /api/v1/public/badge.svg", s.badge)
 	mux.HandleFunc("GET /api/v1/auth/setup", s.setupStatus)
 	mux.HandleFunc("POST /api/v1/auth/setup", s.setup)
