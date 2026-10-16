@@ -1,6 +1,22 @@
 import { execFileSync } from "node:child_process";
 import { test, expect } from "@playwright/test";
 
+let monitorID: string | undefined;
+
+test.afterEach(async ({ page }) => {
+  if (!monitorID) return;
+  const id = monitorID;
+  monitorID = undefined;
+  expect(
+    (
+      await page.request.delete(`/api/v1/monitors/${id}`, {
+        headers: { Origin: process.env.E2E_ORIGIN || "http://localhost:3000" },
+        timeout: 10000,
+      })
+    ).status(),
+  ).toBe(204);
+});
+
 test("publish fix details and read them on the public incident timeline", async ({
   page,
   request,
@@ -38,69 +54,58 @@ test("publish fix details and read them on the public incident timeline", async 
   });
   expect(response.status()).toBe(201);
   const { id } = await response.json();
-  try {
-    // Seed only the explicit local test database, avoiding a minute-long heartbeat wait.
-    execFileSync(
-      "psql",
-      [
-        process.env.TEST_DATABASE_URL!,
-        "-v",
-        "ON_ERROR_STOP=1",
-        "-v",
-        `monitor_id=${id}`,
-      ],
-      {
-        input:
-          "INSERT INTO incidents(id,monitor_id) VALUES (:'monitor_id',:'monitor_id');",
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
-    const incidents = await (
-      await page.request.get("/api/v1/incidents")
-    ).json();
-    const incident = incidents.find(
-      (i: { monitor_id: string }) => i.monitor_id === id,
-    );
-    expect(
-      incident,
-      "Seed the incident fixture before running this browser workflow",
-    ).toBeTruthy();
-    await page.reload();
-    await page.getByRole("button", { name: "Incidents", exact: true }).click();
-    const card = page
-      .locator(".incident-list article")
-      .filter({ has: page.getByRole("heading", { name, exact: true }) });
-    await card.getByText("Add incident update", { exact: true }).click();
-    await card.getByLabel("Update stage").selectOption("monitoring");
-    const message =
-      "Fix deployed. Watching recovery.\n<script>alert('literal text')</script>";
-    await card.getByLabel("Incident details").fill(message);
-    await card.getByRole("button", { name: "Publish update" }).click();
-    await expect(
-      card.getByText("Update published.", { exact: true }),
-    ).toBeVisible();
-    await expect(card.locator(".incident-message")).toHaveText(message);
-    const publicPage = await page.context().newPage();
-    await publicPage.goto("/status");
-    const publicCard = publicPage
-      .locator(".incident-list article")
-      .filter({ has: publicPage.getByRole("heading", { name, exact: true }) });
-    await expect(publicCard.locator(".incident-message")).toHaveText(message);
-    await expect(publicCard.getByText("Add incident update")).toHaveCount(0);
-    expect(
-      (
-        await request.post(`/api/v1/incidents/${incident.id}/updates`, {
-          data: { status: "update", message: "Unauthorized" },
-        })
-      ).status(),
-    ).toBe(401);
-  } finally {
-    expect(
-      (
-        await page.request.delete(`/api/v1/monitors/${id}`, {
-          headers: { Origin: origin },
-        })
-      ).status(),
-    ).toBe(204);
-  }
+  monitorID = id;
+  // Seed only the explicit local test database, avoiding a minute-long heartbeat wait.
+  execFileSync(
+    "psql",
+    [
+      process.env.TEST_DATABASE_URL!,
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-v",
+      `monitor_id=${id}`,
+    ],
+    {
+      input:
+        "BEGIN; UPDATE monitors SET status='down',failures=1,successes=0 WHERE id=:'monitor_id'; INSERT INTO incidents(id,monitor_id) VALUES (:'monitor_id',:'monitor_id'); COMMIT;",
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  const incidents = await (await page.request.get("/api/v1/incidents")).json();
+  const incident = incidents.find(
+    (i: { monitor_id: string }) => i.monitor_id === id,
+  );
+  expect(
+    incident,
+    "Seed the incident fixture before running this browser workflow",
+  ).toBeTruthy();
+  await page.reload();
+  await page.getByRole("button", { name: /^Incidents(?: \d+)?$/ }).click();
+  const card = page
+    .locator(".incident-list article")
+    .filter({ has: page.getByRole("heading", { name, exact: true }) });
+  await card.getByText("Add incident update", { exact: true }).click();
+  await card.getByLabel("Update stage").selectOption("monitoring");
+  const message =
+    "Fix deployed. Watching recovery.\n<script>alert('literal text')</script>";
+  await card.getByLabel("Incident details").fill(message);
+  await card.getByRole("button", { name: "Publish update" }).click();
+  await expect(
+    card.getByText("Update published.", { exact: true }),
+  ).toBeVisible();
+  await expect(card.locator(".incident-message")).toHaveText(message);
+  const publicPage = await page.context().newPage();
+  await publicPage.goto("/status");
+  const publicCard = publicPage
+    .locator(".incident-list article")
+    .filter({ has: publicPage.getByRole("heading", { name, exact: true }) });
+  await expect(publicCard.locator(".incident-message")).toHaveText(message);
+  await expect(publicCard.getByText("Add incident update")).toHaveCount(0);
+  expect(
+    (
+      await request.post(`/api/v1/incidents/${incident.id}/updates`, {
+        data: { status: "update", message: "Unauthorized" },
+      })
+    ).status(),
+  ).toBe(401);
 });

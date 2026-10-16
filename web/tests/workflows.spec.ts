@@ -69,7 +69,10 @@ test("administrator workflow and redacted public status against real PostgreSQL"
       timeout: 60000,
     },
   );
-  expect(tick.ok()).toBeTruthy();
+  expect(
+    tick.ok(),
+    `Scheduler returned ${tick.status()}: ${await tick.text()}`,
+  ).toBeTruthy();
   await page.getByRole("button", { name: "Refresh data" }).click();
   await expect(page.getByText("1 samples").first()).toBeVisible();
   await page
