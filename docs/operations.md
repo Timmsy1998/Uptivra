@@ -17,6 +17,8 @@ Monitor the monitor from an independent system. Alert on scheduler silence, stal
 
 On Vercel, inspect cron/function logs and the actual invocation schedule. For native services use `journalctl -u uptivra-scheduler`; for Compose use `docker compose logs scheduler`. Logs intentionally omit targets, headers, payloads and secret-bearing errors. Tick counters describe completed execution attempts; a fenced stale result may be ignored, so counters are not an audit ledger of committed rows.
 
+The **Delivery & scheduler** panel shows the last durable run, overdue monitors and notification backlog. An unfinished run may indicate interruption; no recorded run means no scheduler invocation has been recorded since migration. Use an independent monitor to detect scheduler silence.
+
 Useful read-only database queries (run with a trusted, appropriately restricted operator account):
 
 ```sql
@@ -26,6 +28,7 @@ SELECT count(*) AS due,
 FROM monitors
 WHERE enabled AND next_check <= now()
   AND (maintenance_until IS NULL OR maintenance_until <= now())
+  AND active_maintenance_end(id, now()) IS NULL
   AND (lease_until IS NULL OR lease_until <= now());
 
 -- Coverage gaps outside maintenance; never treat these as successful checks.
@@ -33,6 +36,7 @@ SELECT count(*) AS stale
 FROM monitors
 WHERE enabled
   AND (maintenance_until IS NULL OR maintenance_until <= now())
+  AND active_maintenance_end(id, now()) IS NULL
   AND (last_check IS NULL OR last_check < now() - (2 * interval_seconds + 30) * interval '1 second');
 
 SELECT count(*) FILTER (WHERE delivered_at IS NULL AND failed_at IS NULL) AS pending,
@@ -43,7 +47,7 @@ FROM deliveries;
 
 A tick claims at most 32 checks and 16 deliveries with eight workers. Checks get a 42-second budget and the entire tick 55 seconds. A 90-second expired lease becomes reclaimable. Large populations, slow targets, database contention or provider scheduling delays reduce coverage. Start below capacity, measure and adapt; there is no established performance SLA. Monitor sustained overdue work rather than relying on monitor count alone.
 
-Notifications have eight total attempts, with nominal delays of 1, 2, 4, 8, 16, 32 and 64 minutes after successive failures. Actual retries are quantized by scheduler ticks. Exhausted entries set `failed_at`; there is no replay UI or automatic requeue. Fix delivery configuration and verify a new real incident/recovery. Deleting a channel deletes its queued deliveries; deleting a monitor removes its checks and incidents. The UI confirms destructive actions.
+Notifications have eight total attempts, with nominal delays of 1, 2, 4, 8, 16, 32 and 64 minutes after successive failures. Actual retries are quantized by scheduler ticks. Exhausted entries set `failed_at`. Fix delivery configuration, use **Channels → Test**, and inspect the result in **Delivery & scheduler**. Failed deliveries can be retried there with a fresh eight-attempt budget; retries run on a subsequent scheduler tick. Retried notifications can be delivered more than once. Deleting a channel deletes its queued deliveries; deleting a monitor removes its checks and incidents. The UI confirms destructive actions.
 
 ## Backups and restore
 
@@ -66,6 +70,6 @@ Retention deletes checks in bounded batches and old resolved incidents according
 
 Pause/maintenance controls suppress new claims but preserve incidents and history. Edits invalidate an outstanding claim and reset consecutive counters; an existing incident stays open until recovery thresholds are reached. Configuration updates replace complete objects rather than patching fields. There is no concurrent-edit version token; the last accepted edit wins.
 
-Bootstrap creates only the first administrator and refuses replacement. If the account is lost, recover through your trusted operational process; there is no password-reset email flow. Do not invent ad hoc database edits as a normal administration interface. Encryption-key rotation, multi-user recovery and delivery replay need explicit future tooling.
+Bootstrap and verified browser setup create only the first owner and refuse replacement. The owner manages additional administrators and ownership transfers in Settings. For a lost account password, use the trusted terminal [recovery command](deployment.md#native-development) with that account’s email; it revokes the affected account’s browser sessions. There is no password-reset email flow. Encryption-key rotation still needs explicit future tooling.
 
-Before an upgrade: back up, inspect migration compatibility, run tests, apply migrations explicitly and verify actual checks/alerts afterward. The initial release contains schema version 1. Do not edit an already-applied migration to change production schema. Roll back application code only when the resulting schema is compatible; otherwise restore a tested backup with an understood data-loss window.
+Before an upgrade: back up, inspect migration compatibility, run tests, apply migrations explicitly and verify actual checks/alerts afterward. This version includes migrations through schema version 8. Do not edit an already-applied migration to change production schema. Roll back application code only when the resulting schema is compatible; otherwise restore a tested backup with an understood data-loss window.

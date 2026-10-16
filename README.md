@@ -14,13 +14,14 @@ These are screenshots of the running application, captured by its browser workfl
 
 - Configurable HTTP(S) GET checks: expected status, body substring, encrypted request headers, intervals and timeouts.
 - Consecutive failure/recovery thresholds, automatic incident history, pause and maintenance controls.
-- Measured 24-hour uptime, mean and p95 response times, recent check charts and history.
-- Webhook and Discord alerts backed by a durable outbox, signed webhook payloads and bounded retries.
-- One administrator, secure sessions, scoped API keys and an explicitly redacted public status API.
+- Measured 24-hour statistics and 7/30/90-day availability, daily uptime bars, incident durations and separate missing coverage.
+- Webhook and Discord alerts with signed payloads, delivery diagnostics, channel tests and failed-delivery retries.
+- Verified first-owner setup, additional administrators, ownership transfer, secure sessions and scoped API keys.
+- Scheduled and weekly maintenance, public upcoming work, and scheduler health diagnostics.
 - Responsive light/dark workspace, public status page, SVG badge and small application integrations.
 - PostgreSQL work claims that survive overlapping cron invocations and process restarts.
 
-The current scope is one administrator, one public status page and public-network HTTP(S) endpoints on ports 80/443. TCP/DNS checks, TLS-expiry alerts, email, geographic probes, multiple users and status-page domains are future work. Private-network monitoring is deliberately blocked. There is no billing, audit log or alert replay interface.
+The current scope is trusted administrators under one owner, one public status page and public-network HTTP(S) endpoints on ports 80/443. TCP/DNS checks, TLS-expiry alerts, email, geographic probes and status-page domains are future work. Private-network monitoring is deliberately blocked. There is no billing or audit log.
 
 ## Try a temporary demo
 
