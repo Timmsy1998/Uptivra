@@ -274,6 +274,10 @@ func TestChecksPreserveScheduleAfterMissedTicks(t *testing.T) {
 	}
 }
 
+// Password workflows run several cost-12 bcrypt operations. Allow headroom for
+// race instrumentation and shared CI CPUs while still bounding database waits.
+const passwordTestTimeout = 2 * time.Minute
+
 // Hold session insertion at a database barrier while a password change competes.
 // Once both finish, a login using the old password must never leave a valid session.
 func TestPasswordChangeFencesInFlightLogin(t *testing.T) {
@@ -286,7 +290,7 @@ func TestPasswordChangeFencesInFlightLogin(t *testing.T) {
 
 func testPasswordChangeFencesInFlightLogin(t *testing.T, recovery bool) {
 	s := testutil.DB(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), passwordTestTimeout)
 	defer cancel()
 	const password = "original-password-for-race"
 	if err := s.Bootstrap(ctx, "race@example.com", password); err != nil {
@@ -387,7 +391,7 @@ func testPasswordChangeFencesInFlightLogin(t *testing.T, recovery bool) {
 
 func TestResetPassword(t *testing.T) {
 	s := testutil.DB(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), passwordTestTimeout)
 	defer cancel()
 	const email = "admin@example.com"
 	const old = "original-admin-password"
